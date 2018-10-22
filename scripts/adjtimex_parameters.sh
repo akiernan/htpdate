@@ -27,10 +27,10 @@ if [ $3 ]; then
 	FREQ=$3
 fi
 
-FREQTOT=`expr $PPM \* 65536 + $TICK \* 6553600 + $FREQ`
+FREQTOT=`echo "$PPM * 65536 + $TICK * 6553600 + $FREQ" | bc`
 
-TICK=`expr $FREQTOT / 6553600`
-FREQ=`expr $FREQTOT % 6553600`
+TICK=`echo "$FREQTOT / 6553600" | bc`
+FREQ=`echo "$FREQTOT % 6553600" | bc | awk -F. '{print $1}'`
 
 echo "TICK=$TICK"
 echo "FREQ=$FREQ"

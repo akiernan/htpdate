@@ -2,12 +2,11 @@ prefix = /usr
 bindir = ${prefix}/bin
 mandir = ${prefix}/share/man
 
-#CC = tcc
-#CC = icc
 CC = gcc
-CFLAGS += -Wall -ansi -Os
+CFLAGS += -Wall -ansi -Os -DDEBUG
 
 INSTALL = /usr/bin/install -c
+STRIP = /usr/bin/strip -s
 
 all: htpdate
 
@@ -15,6 +14,7 @@ htpdate: htpdate.c
 	$(CC) $(CFLAGS) -o htpdate htpdate.c
 
 install: all
+	$(STRIP) htpdate
 	mkdir -p $(bindir)
 	$(INSTALL) -m 755 htpdate $(bindir)/htpdate
 	mkdir -p $(mandir)/man8

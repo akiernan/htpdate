@@ -1,5 +1,15 @@
-Changes in 0.8.8
+Changes in 0.9.0
 ----------------
+
+- Mostly code cleanup
+- Changed "char" variables into "int", which should be more efficient
+- Changed the qsort routine, into an insertion sort. Quicksort is
+  kind of overkill for such small lists.
+- Debug mode is allowed in daemon mode.
+
+
+0.8.8
+-----
 
 - Speeded up the poll cycle loop, once a time offset has been detected.
 - Added systematic drift to the syslog logging (daemon only).
@@ -14,7 +24,7 @@ Changes in 0.8.8
 -----
 
 - Bug fix: with precision set, the time could only be adjusted
-  negative (slow don).
+  negative (slow down).
 - Fixed undesired effects in (rare) cases when using only a few servers.
 - Exit code changed to 1 if no server was found (requested by Supernaut).
 

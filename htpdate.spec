@@ -1,13 +1,14 @@
 Summary: HTTP based time synchronization tool
 Name: htpdate
-Version: 0.8.8
+Version: 0.9.0
 Release: 1
 License: GPL
 Group: System Environment/Daemons
 URL: http://www.clevervest.com/htp/
-Packager: Eddy Vervest <eddy@clevervest.com>
+Packager: Eddy Vervest <eddy@cleVervest.com>
 Source: http://www.clevervest.com/htp/archive/c/%{name}-%{version}.tar.bz2
 BuildRoot: %{_tmppath}/%{name}-%{version}-root
+Prereq: /sbin/chkconfig
 
 
 %description
@@ -31,20 +32,26 @@ make
 strip -s htpdate
 
 %install
-mkdir -p %{buildroot}/etc/rc.d/init.d
-mkdir -p %{buildroot}/usr/bin
-mkdir -p %{buildroot}/usr/share/man/man8
+mkdir -p %{buildroot}/%{_bindir}
+mkdir -p %{buildroot}/%{_mandir}
+mkdir -p %{buildroot}/%{_initrddir}
 
-install -m 755 htpdate %{buildroot}/usr/bin/htpdate
-install -m 644 htpdate.8.gz %{buildroot}/usr/share/man/man8/htpdate.8.gz
-install -m 755 htpdate.init %{buildroot}/etc/rc.d/init.d/htpdate
+install -m0755 htpdate %{buildroot}%{_bindir}/htpdate
+install -m0644 htpdate.8.gz %{buildroot}%{_mandir}/htpdate.8.gz
+install -m0755 htpdate.init %{buildroot}%{_initrddir}/htpdate
+
+%post
+/sbin/chkconfig --add htpdate
+
+%preun
+/sbin/chkconfig --del htpdate
 
 %clean
 [ "%{buildroot}" != "/" ] && rm -rf %{buildroot}
 
 %files
 %defattr(-,root,root)
-%doc README CHANGES
-%config(noreplace) /etc/rc.d/init.d/htpdate
-/usr/bin/htpdate
-/usr/share/man/man8/htpdate.8.gz
+%doc README Changelog
+%config(noreplace) %{_initrddir}/htpdate
+%{_bindir}/htpdate
+%{_mandir}/htpdate.8.gz

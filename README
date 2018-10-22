@@ -19,32 +19,31 @@ Installation from source
 
 Tested on Linux and FreeBSD only, but should work for most Unix flavors.
 
-	$ tar zxvf htpdate-X.Y.Z.tar.gz
+	$ tar zxvf htpdate-x.y.z.tar.gz
 		or
-	$ tar jxvf htpdate-X.Y.Z.tar.bz2
+	$ tar jxvf htpdate-x.y.z.tar.bz2
 	$ cd htpdate-X.Y.Z
 	$ make
 	$ make install
 
-A sample init script in /etc/init.d/ is included, but not installed
-automaticcaly.
+An example init script in /etc/init.d/ is included, but not installed
+automatically.
 This give the user the option to run htpdate as daemon or run it
 periodically from cron. 
+
 
 Installation from RPM
 ---------------------
 
 The easiest way to install (Redhat, SuSE, Mandriva etc..)
 
-	$ rpm -i htpdate-X.Y.Z.i386.rpm
+	$ rpm -i htpdate-x.y.z.i386.rpm
 		or when upgrading
-	$ rpm -Uvh htpdate-X.Y.Z.i386.rpm
+	$ rpm -Uvh htpdate-x.y.z.i386.rpm
 
-The RPM version does install a sample init script in /etc/init.d/,
-but doesn't create the symlink to start it automatic at boot time.
-This give the user the option to run htpdate as daemon or run it
-periodically from cron. 
-
+By default the htpdate daemon is activated (with chkconfig).
+If you only want to run htpdate from cron, disable the htpdate service
+with 'chkconfig --del htpdate'.
 
 Usage
 -----
@@ -61,8 +60,7 @@ See manpage for more details.
 To do
 -----
 
-- ntp_adjtime support (?)
 - I'm open for suggestions :)
 
 
-Eddy Vervest <eddy@clevervest.com>
+Eddy Vervest <eddy@cleVervest.com>
