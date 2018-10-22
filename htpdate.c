@@ -1,5 +1,5 @@
 /*
-	htpdate v0.9.1
+	htpdate v0.9.2
 
 	Eddy Vervest <eddy@cleVervest.com>
 	http://www.clevervest.com/htp
@@ -21,7 +21,7 @@
 
 	~# htpdate -a www.linux.org www.freebsd.org
 
-	...see manpage for more parameters
+	...see man page for more parameters
 
 
 	This program is free software; you can redistribute it and/or
@@ -44,34 +44,34 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <sys/time.h>
 #include <time.h>
+#include <sys/time.h>
+#include <sys/timex.h>
 #include <syslog.h>
 #include <stdarg.h>
 #include <limits.h>
 #include <pwd.h>
 #include <grp.h>
 
-#define VERSION 				"0.9.1"
+#define VERSION 				"0.9.2"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
 #define	DEFAULT_IP_VERSION		PF_UNSPEC		/* IPv6 and IPv4 */
 #define	DEFAULT_HTTP_VERSION	"1"				/* HTTP/1.1 */
 #define	DEFAULT_TIME_LIMIT		31536000		/* 1 year */
-#define	DEFAULT_MIN_SLEEP		10				/* 2^10 => 17 minutes */
-#define	DEFAULT_MAX_SLEEP		18				/* 2^18 => 72 hours */
-#define	RETRY					2				/* Poll attempts */
+#define	DEFAULT_MIN_SLEEP		1024			/* about 17 minutes */
+#define	DEFAULT_MAX_SLEEP		131072			/* about 36 hours */
+#define	MAX_DRIFT				32768000		/* 500 PPM */
+#define	MAX_ATTEMPT				2				/* Poll attempts */
 #define	DEFAULT_PID_FILE		"/var/run/htpdate.pid"
-#define	BUFFERSIZE				2048
+#define	BUFFERSIZE				1024
 
-#define SIGN(x) (x < 0 ? (-1) : 1)
+#define sign(x) (x < 0 ? (-1) : 1)
 
 
 /* By default we turn off "debug", "log" and "daemonize" mode  */
-#ifdef DEBUG
 static int		debug = 0;
-#endif
 static int		logmode = 0;
 static int		daemonize = 0;
 static time_t	gmtoffset;
@@ -142,16 +142,14 @@ static void printlog( int is_error, char *format, ... ) {
 }
 
 
-static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, char *httpversion, int ipversion, unsigned long when ) {
+static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, char *httpversion, int ipversion, int when ) {
 	int					server_s;
 	int					rc;
 	struct addrinfo		hints, *res, *res0;
 	struct tm			tm;
-	struct timeval		timevalue = {.tv_sec = LONG_MAX};
-	struct timeval		timeofday = {.tv_sec = 0};
-#ifdef DEBUG
+	struct timeval		timevalue = {LONG_MAX, 0};
+	struct timeval		timeofday = {0, 0};
 	long				rtt;
-#endif
 	char				buffer[BUFFERSIZE];
 	char				remote_time[25] = {};
 	char				url[128] = {};
@@ -192,7 +190,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	   Connection: close, allows the server the immediately close the
 	   connection after sending the response.
 	*/
-	sprintf(buffer, "HEAD %s/ HTTP/1.%s\r\nHost: %s\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n", url, httpversion, host, VERSION);
+	sprintf(buffer, "HEAD %s/ HTTP/1.%s\r\nHost: %s\r\nUser-Agent: htpdate/"VERSION"\r\nPragma: no-cache\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n", url, httpversion, host);
 
 	/* Loop through the available canonical names */
 	res = res0;
@@ -220,18 +218,14 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	/* Wait till we reach the desired time, "when" */
 	gettimeofday(&timeofday, NULL);
 
-#ifdef DEBUG
 	/* Initialize RTT (start of measurement) */
 	rtt = timeofday.tv_sec;
-#endif
 
 	if ( when >= timeofday.tv_usec ) {
 		usleep( when - timeofday.tv_usec );
 	} else {
 		usleep( 1000000 + when - timeofday.tv_usec );
-#ifdef DEBUG
 		rtt++;
-#endif
 	}
 
 	/* Send HEAD request */
@@ -257,11 +251,9 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 
 		gettimeofday(&timeofday, NULL);
 
-#ifdef DEBUG
 		/* rtt contains round trip time in micro seconds, now! */
 		rtt = ( timeofday.tv_sec - rtt ) * 1000000 + \
 			timeofday.tv_usec - when;
-#endif
 
 		/* Look for the line that contains Date: */
 		if ( (pdate = strstr(buffer, "Date: ")) != NULL ) {
@@ -275,13 +267,11 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 				printlog( 1, "%s unknown time format", host );
 			}
 
-#ifdef DEBUG
 			/* Print host, raw timestamp, round trip time */
 			if ( debug )
 				printlog( 0, "%-25s %s (%.3f) => %li", host, remote_time, \
 				  rtt * 1e-6, timevalue.tv_sec - timeofday.tv_sec \
 				  + gmtoffset );
-#endif
 
 		} else {
 			printlog( 1, "%s no timestamp", host );
@@ -309,34 +299,38 @@ static int setclock( double timedelta, int setmode ) {
 
 	switch ( setmode ) {
 
-	case 0:						/* no time adjustment, just print time */
+	case 0:						/* No time adjustment, just print time */
 		printlog( 0, "Offset %.3f seconds", timedelta );
 		return(0);
 
-	case 1:						/* adjust time smoothly */
+	case 1:						/* Adjust time smoothly */
 		timeofday.tv_sec  = (long)timedelta;	
 		timeofday.tv_usec = (long)((timedelta - timeofday.tv_sec) * 1000000);	
 
 		printlog( 0, "Adjusting %.3f seconds", timedelta );
 
-		/* become root */
+		/* Become root */
 		seteuid(0);
 		return( adjtime(&timeofday, NULL) );
 
-	case 2:						/* set time */
+	case 2:					/* Set time */
 		printlog( 0, "Setting %.3f seconds", timedelta );
 
 		gettimeofday( &timeofday, NULL );
 		timedelta += ( timeofday.tv_sec + timeofday.tv_usec*1e-6 );
 
 		timeofday.tv_sec  = (long)timedelta;	
-		timeofday.tv_usec = (long)((timedelta - timeofday.tv_sec) * 1000000);	
+		timeofday.tv_usec = (long)(timedelta - timeofday.tv_sec) * 1000000;	
 
 		printlog( 0, "Set: %s", asctime(localtime(&timeofday.tv_sec)) );
 
-		/* become root */
+		/* Become root */
 		seteuid(0);
 		return( settimeofday(&timeofday, NULL) );
+
+	case 3:					/* Set frequency, but first an adjust */
+		return( setclock( timedelta, 1 ) );
+
 
 	default:
 		return(-1);
@@ -346,10 +340,34 @@ static int setclock( double timedelta, int setmode ) {
 }
 
 
-/* Display help page */
+static int htpdate_adjtimex( double drift ) {
+	struct timex		tmx;
+	long				freq;
+
+	/* Read current kernel frequency */
+	tmx.modes = 0;
+	ntp_adjtime(&tmx);
+
+	/* Calculate new frequency */
+	freq = (long)(65536e6 * drift);
+
+	/* Take the average of current and new drift values */
+	tmx.freq = tmx.freq + (freq >> 1);
+	if ( (tmx.freq < -MAX_DRIFT) || (tmx.freq > MAX_DRIFT) )
+		tmx.freq = sign(tmx.freq) * MAX_DRIFT;
+
+	printlog( 0, "Adjusting frequency %li", tmx.freq );
+	tmx.modes = MOD_FREQUENCY;
+
+	/* Become root */
+	seteuid(0);
+	return( ntp_adjtime(&tmx) );
+}
+
+
 static void showhelp() {
-	printf("htpdate version %s\n\
-Usage: htpdate [-046adhlqstD] [-i pid file] [-m minpoll] [-M maxpoll]\n\
+	puts("htpdate version "VERSION"\n\
+Usage: htpdate [-046adhlqstxD] [-i pid file] [-m minpoll] [-M maxpoll]\n\
          [-p precision] [-P <proxyserver>[:port]] [-u user[:group]]\n\
          <host[:port]> ...\n\n\
   -0    HTTP/1.0 request\n\
@@ -369,8 +387,9 @@ Usage: htpdate [-046adhlqstD] [-i pid file] [-m minpoll] [-M maxpoll]\n\
   -s    set time\n\
   -t    turn off sanity time check\n\
   -u    run daemon as user\n\
+  -x    adjust kernel clock\n\
   host  web server hostname or ip address (maximum of 16)\n\
-  port  port number (default 80 and 8080 for proxy server)\n\n", VERSION);
+  port  port number (default 80 and 8080 for proxy server)\n");
 
 	return;
 }
@@ -384,13 +403,13 @@ static void runasdaemon( char *pidfile ) {
 	/* Check if htpdate is already running (pid exists)*/
 	pid_file = fopen(pidfile, "r");
 	if ( pid_file ) {
-		fprintf( stderr, "htpdate already running" );
+		fputs( "htpdate already running\n", stderr );
 		exit(1);
 	}
 
 	pid = fork();
 	if ( pid < 0 ) {
-		fprintf( stderr, "fork()" );
+		fputs( "fork()\n", stderr );
 		exit(1);
 	}
 
@@ -446,7 +465,7 @@ int main( int argc, char *argv[] ) {
 	char				*httpversion = DEFAULT_HTTP_VERSION;
 	char				*pidfile = DEFAULT_PID_FILE;
 	char				*user = NULL, *userstr = NULL, *group = NULL;
-	double				timeavg = 0, sumdelta = 0, drift;
+	double				timeavg = 0, drift = 0;
 	int					timedelta[MAX_HTTP_HOSTS], timestamp;
 	int                 sumtimes, numservers, validtimes, goodtimes, mean;
 	int					nap = 0, when = 500000, precision = 0;
@@ -468,7 +487,7 @@ int main( int argc, char *argv[] ) {
 
 
 	/* Parse the command line switches and arguments */
-	while ( (param = getopt(argc, argv, "046adhi:lm:p:qstu:DM:P:") ) != -1)
+	while ( (param = getopt(argc, argv, "046adhi:lm:p:qstu:xDM:P:") ) != -1)
 	switch( param ) {
 
 		case '0':			/* HTTP/1.0 */
@@ -484,9 +503,7 @@ int main( int argc, char *argv[] ) {
 			setmode = 1;
 			break;
 		case 'd':			/* turn debug on */
-#ifdef DEBUG
 			debug = 1;
-#endif
 			break;
 		case 'h':			/* show help */
 			showhelp();
@@ -499,7 +516,7 @@ int main( int argc, char *argv[] ) {
 			break;
 		case 'm':			/* minimum poll interval */
 			if ( ( minsleep = atoi(optarg) ) <= 0 ) {
-				fprintf( stderr, "Invalid sleep time" );
+				fputs( "Invalid sleep time\n", stderr );
 				exit(1);
 			}
 			sleeptime = minsleep;
@@ -507,7 +524,7 @@ int main( int argc, char *argv[] ) {
 		case 'p':			/* precision */
 			precision = atoi(optarg) ;
 			if ( (precision <= 0) || (precision >= 500) ) {
-				fprintf( stderr, "Invalid precision" );
+				fputs( "Invalid precision\n", stderr );
 				exit(1);
 			}
 			precision *= 1000;
@@ -543,13 +560,16 @@ int main( int argc, char *argv[] ) {
 				}
 			}
 			break;
+		case 'x':			/* adjust time and "kernel" */
+			setmode = 3;
+			break;
 		case 'D':			/* run as daemon */
 			daemonize = 1;
 			logmode = 1;
 			break;
 		case 'M':			/* maximum poll interval */
 			if ( ( maxsleep = atoi(optarg) ) <= 0 ) {
-				fprintf( stderr, "Invalid sleep time" );
+				fputs( "Invalid sleep time\n", stderr );
 				exit(1);
 			}
 			break;
@@ -573,13 +593,13 @@ int main( int argc, char *argv[] ) {
 	/* Exit if too many servers are specified */
 	numservers = argc - optind;
 	if ( numservers > MAX_HTTP_HOSTS ) {
-		fprintf( stderr, "Too many servers" );
+		fputs( "Too many servers\n", stderr );
 		exit(1);
 	}
 
 	/* One must be "root" to change the system time */
 	if ( (getuid() != 0) && (setmode || daemonize) ) {
-		fprintf( stderr, "Only root can change time\n" );
+		fputs( "Only root can change time\n", stderr );
 		exit(1);
 	}
 
@@ -630,12 +650,12 @@ int main( int argc, char *argv[] ) {
 		splithostport( &host, &port );
 
 		/* Retry if first poll shows time offset */
-		try = RETRY;
+		try = MAX_ATTEMPT;
 		do {
 			timestamp = getHTTPdate( host, port, proxy, proxyport,\
 					httpversion, ipversion, when );
 			try--;
-		} while ( timestamp && try && daemonize );
+		} while ( timestamp && try );
 
 		/* Only include valid responses in timedelta[] */
 		if ( timestamp < timelimit && timestamp > -timelimit ) {
@@ -649,7 +669,7 @@ int main( int argc, char *argv[] ) {
 
 		/* Sleep for a while, unless we detected a time offset */
 		if ( daemonize && !offsetdetect )
-			sleep( (1 << sleeptime) / numservers );
+			sleep( sleeptime / numservers );
 
 		/* Take a nap, to spread polls equally within a second.
 		   Example:
@@ -698,13 +718,11 @@ int main( int argc, char *argv[] ) {
 
 		timeavg = sumtimes/(double)goodtimes;
 
-#ifdef DEBUG
 		if ( debug ) {
 			printlog( 0, "#: %d, mean: %d, average: %.3f", goodtimes, \
 					mean, timeavg );
-			printlog( 0, "Timezone: GMT%+li (%s,%s)", gmtoffset / 3600, tzname[0], tzname[1] );
+			printlog( 0, "Timezone: GMT%+li (%s,%s)", gmtoffset/3600, tzname[0], tzname[1] );
 		}
-#endif
 
 		/* Do I really need to change the time?  */
 		if ( sumtimes || !daemonize ) {
@@ -712,11 +730,11 @@ int main( int argc, char *argv[] ) {
 			   (< +-1 second), adjust the time with the value of precision
 			*/
 			if ( precision && sumtimes < goodtimes && sumtimes > -goodtimes )
-				timeavg = (double)precision / 1000000 * SIGN(sumtimes);
+				timeavg = (double)precision / 1000000 * sign(sumtimes);
 
-			/* Correct the clock in daemon mode */
-			if ( setclock( timeavg, setmode ) )
-				printlog( 1, "Time change failed" );
+			/* Correct the clock, if not in "adjtimex" mode */
+			if ( setclock( timeavg, setmode ) < 0 )
+					printlog( 1, "Time change failed" );
 
 			/* Drop root privileges again */
 			if ( sw_uid ) seteuid( sw_uid );
@@ -725,25 +743,36 @@ int main( int argc, char *argv[] ) {
 			if ( daemonize ) {
 				if ( starttime ) {
 					/* Calculate systematic clock drift */
-					sumdelta += timeavg;
-					drift = sumdelta * 86400 / (time(NULL) - starttime);
-					printlog( 0, "Drift %.2f PPM, %.2f sec/day", \
-							drift / 0.0864, drift );
+					drift = timeavg / ( time(NULL) - starttime );
+					printlog( 0, "Drift %.2f PPM, %.2f s/day", \
+							drift*1e6, drift*86400 );
+
+					/* Adjust system clock */
+					if ( setmode == 3 ) {
+						starttime = time(NULL);
+						/* Adjust the kernel clock */
+						if ( htpdate_adjtimex( drift ) < 0 )
+							printlog( 1, "Frequency change failed" );
+
+						/* Drop root privileges again */
+						if ( sw_uid ) seteuid( sw_uid );
+						if ( sw_gid ) setegid( sw_gid );
+					}
 				} else {
 					starttime = time(NULL);
 				}
 
 				/* Decrease polling interval */
 				if ( sleeptime > minsleep )
-					sleeptime--;
+					sleeptime >>= 1;
 
 				/* Sleep for minsleep, after a time adjust or set */
-				sleep( 1 << minsleep );
+				sleep( minsleep );
 			}
 		} else {
 			/* Increase polling interval */
 			if ( sleeptime < maxsleep )
-				sleeptime++;
+				sleeptime <<= 1;
 		}
 
 	} else {
@@ -756,7 +785,9 @@ int main( int argc, char *argv[] ) {
 	}
 
 	/* After first poll cycle do not step through time, only adjust */
-	setmode = 1;
+	if ( setmode != 3 ) {
+		setmode = 1;
+	}
 
 	} while ( daemonize );		/* end of infinite while loop */
 

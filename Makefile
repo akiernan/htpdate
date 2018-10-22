@@ -3,7 +3,7 @@ bindir = ${prefix}/bin
 mandir = ${prefix}/share/man
 
 CC = gcc
-CFLAGS += -Wall -ansi -Os -DDEBUG
+CFLAGS += -Wall -ansi -Os
 
 INSTALL = /usr/bin/install -c
 STRIP = /usr/bin/strip -s

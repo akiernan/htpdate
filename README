@@ -49,9 +49,10 @@ with 'chkconfig --del htpdate'.
 Usage
 -----
 
-Usage: htpdate [-046adhlqstD] [-i pid file] [-m minpoll] [-M maxpoll]
-         [-p precision] [-P <proxyserver>[:port]] [-u user[:group]]
-         <host[:port]> ...
+Usage: htpdate [-046adhlqstxD] [-i pid file] [-m minpoll] [-M maxpoll]
+	[-p precision] [-P <proxyserver>[:port]] [-u user[:group]]
+	<host[:port]> ...
+
 
 In general more web servers (multiple the same is allowed) will increase
 accuracy.

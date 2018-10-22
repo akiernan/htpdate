@@ -1,5 +1,13 @@
-Changes in 0.9.1
+Changes in 0.9.2
 ----------------
+
+- The use of the ntp_adjtime system call is now optional. The clock
+  frequency will be adjusted when using the "-x" switch and the systematic
+  drift will be compensated. Works only in daemon mode.
+
+
+0.9.1
+-----
 
 - Htpdate can drop root privileges and run as a restricted user.
 - Drift calculation starts now after first time correction.
