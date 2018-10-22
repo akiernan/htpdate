@@ -1,5 +1,5 @@
 /*
-	htpdate v0.6.1
+	htpdate v0.6.2
 
 	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
@@ -14,7 +14,7 @@
 
 	Debug mode (shows raw timestamps, rtt and time difference):
 
-	# htpdate -v www.xs4all.nl www.demon.nl
+	# htpdate -d www.xs4all.nl www.demon.nl
 
 	Adjust time smoothly:
 
@@ -48,7 +48,7 @@
 #include <math.h>
 #include <limits.h>
 
-#define version 		"0.6.1"
+#define version 		"0.6.2"
 #define	BUFFER			2048
 
 
@@ -468,7 +468,7 @@ int main( int argc, char *argv[] ) {
 
 			
 		/* Do I really need to change the time?  */
-		if ( (timeavg > 0) || (!daemonize) )
+		if ( (timeavg != 0) || (!daemonize) )
 			setclock( timeavg, setmode );
 
 	} else {
@@ -481,7 +481,7 @@ int main( int argc, char *argv[] ) {
 
 
 	/* Calculate new sleep time, depending on offset */
-	if ( timeavg > 0 ) {
+	if ( timeavg != 0 ) {
 		sleeptime--;
 		if ( sleeptime < minsleep ) sleeptime = minsleep;
 	} else {

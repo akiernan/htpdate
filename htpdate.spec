@@ -1,11 +1,11 @@
 Summary: HTTP based time synchronization tool
 Name: htpdate
-Version: 0.6.1
+Version: 0.6.2
 Release: 1
 License: GNU General Public License version 2
 Group: System Environment/Daemons
 URL: http://www.clevervest.com/htp/
-Packager: Eddy Vervest <Eddy@cleVervest.com>
+Packager: Eddy Vervest <eddy@clevervest.com>
 Source: http://www.clevervest.com/htp/archive/c/%{name}-%{version}.tar.bz2
 BuildRoot: %{_tmppath}/%{name}-%{version}-root
 

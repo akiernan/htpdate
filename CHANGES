@@ -1,5 +1,11 @@
-Changes in 0.6.1
-------------
+Changes in 0.6.2
+----------------
+
+- Bug fix, time wasn't correct if 'timeavg' was negative...
+
+
+0.6.1
+-----
 
 - Code clean up, use global variable 'timezone'
 
