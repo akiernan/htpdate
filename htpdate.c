@@ -1,5 +1,5 @@
 /*
-	htpdate v0.8.7
+	htpdate v0.8.8
 
 	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
@@ -29,7 +29,6 @@
 	as published by the Free Software Foundation; either version 2
 	of the License, or (at your option) any later version.
 	http://www.gnu.org/copyleft/gpl.html
-
 */
 
 /* needed to avoid implicit warnings from strptime */
@@ -50,12 +49,12 @@
 #include <stdarg.h>
 #include <limits.h>
 
-#define VERSION 				"0.8.7"
+#define VERSION 				"0.8.8"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
 #define	DEFAULT_IP_VERSION		PF_UNSPEC		/* IPv6 and IPv4 */
-#define	DEFAULT_HTTP_VERSION	0				/* HTTP/1.0 */
+#define	DEFAULT_HTTP_VERSION	"1"				/* HTTP/1.1 */
 #define	DEFAULT_TIME_LIMIT		31536000		/* 1 year */
 #define	DEFAULT_MIN_SLEEP		10				/* 2^10 => 17 minutes */
 #define	DEFAULT_MAX_SLEEP		18				/* 2^18 => 72 hours */
@@ -85,10 +84,10 @@ static int compare( const void *a, const void *b ) {
 static void splithostport( char **host, char **port ) {
 	char    *rb, *rc, *lb, *lc;
 
-	lb = strchr( *host, '[');
-	rb = strrchr( *host, ']');
-	lc = strchr( *host, ':');
-	rc = strrchr( *host, ':');
+	lb = strchr( *host, '[' );
+	rb = strrchr( *host, ']' );
+	lc = strchr( *host, ':' );
+	rc = strrchr( *host, ':' );
 
 	/* A (litteral) IPv6 address with portnumber */
 	if ( ( rb < rc ) && ( lb != NULL ) && ( rb != NULL ) ) {
@@ -136,7 +135,7 @@ static void printlog( char is_error, char *format, ... ) {
 }
 
 
-static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, char httpversion, char ipversion, unsigned long when ) {
+static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, char *httpversion, char ipversion, unsigned long when ) {
 	int					server_s;
 	int					rc;
 	struct addrinfo		hints, *res, *res0;
@@ -161,7 +160,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 			hints.ai_family = AF_INET6;
 			break;
 		default:				/* Support IPv6 and IPv4 name resolution */
-			hints.ai_family = DEFAULT_IP_VERSION;
+			hints.ai_family = PF_UNSPEC;
 	}
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_CANONNAME;
@@ -185,11 +184,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	   Cache-Control: no-cache "forces" an HTTP/1.1 compliant
 	   web server to return a fresh timestamp
 	*/
-	if ( httpversion ) {
-		sprintf(out_buf, "HEAD %s/ HTTP/1.1\r\nHost: %s\r\nUser-Agent: htpdate/%s\r\nCache-Control: no-cache\r\n\r\n", url, host, VERSION);
-	} else {
-		sprintf(out_buf, "HEAD %s/ HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\n\r\n", url, VERSION);
-	}
+	sprintf(out_buf, "HEAD %s/ HTTP/1.%s\r\nHost: %s\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n", url, httpversion, host, VERSION);
 
 	/* Loop through the available canonical names */
 	res = res0;
@@ -208,7 +203,6 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 
 		break;
 	} while ( ( res = res->ai_next ) );
-
 
 	if ( rc ) {
 		printlog( 1, "%-25s connection failed", host );
@@ -327,29 +321,27 @@ static int setclock( double timedelta, char setmode ) {
 
 /* Display help page */
 static void showhelp() {
-	printf("htpdate version %s\n", VERSION);
-	printf("\
-Usage: htpdate [-4|-6] [-a|-q|-s] [-d|-D] [-1|-h|-l|-t] [-i pid file]\n\
-         [-m minpoll] [-M maxpoll] [-p precision] [-P <proxyserver>[:port]]\n\
-         <host[:port]> ...\n\n\
-  -1    HTTP/1.1 request (default HTTP/1.0)\n\
+	printf("htpdate version %s\n\
+Usage: htpdate [-046adhlqstD] [-i pid file] [-m minpoll] [-M maxpoll]\n\
+         [-p precision] [-P <proxyserver>[:port]] <host[:port]> ...\n\n\
+  -0    HTTP/1.0 request\n\
   -4    Force IPv4 name resolution only\n\
   -6    Force IPv6 name resolution only\n\
   -a    adjust time smoothly\n\
-  -q    query only, don't make time changes (default)\n\
-  -s    set time\n\
   -d    debug mode\n\
   -D    daemon mode\n\
   -h    help\n\
-  -l    use syslog for output\n\
-  -t    turn off sanity time check\n\
   -i    pid file\n\
-  -m    minimum poll interval (2^m sec)\n\
-  -M    maximum poll interval (2^M sec)\n\
-  -p    precision (usec)\n\
+  -l    use syslog for output\n\
+  -m    minimum poll interval\n\
+  -M    maximum poll interval\n\
+  -p    precision (ms)\n\
   -P    proxy server\n\
+  -q    query only, don't make time changes (default)\n\
+  -s    set time\n\
+  -t    turn off sanity time check\n\
   host  web server hostname or ip address (maximum of 16)\n\
-  port  port number (default 80 and 8080 for proxy server)\n\n");
+  port  port number (default 80 and 8080 for proxy server)\n\n", VERSION);
 
 	return;
 }
@@ -360,16 +352,18 @@ int main( int argc, char *argv[] ) {
 	char				*host = NULL, *proxy = NULL;
 	char				*port, *proxyport;
 	int					timedelta[MAX_HTTP_HOSTS], timestamp;
+	time_t				starttime, now;
 	int                 sumtimes, numservers, validtimes, goodtimes, mean, i;
-	double				timeavg;
+	double				timeavg, sumdelta = 0;
+	int					drift;
 	int					nap = 0, when = 500000, precision = 0;
 	char				minsleep = DEFAULT_MIN_SLEEP;
 	char				maxsleep = DEFAULT_MAX_SLEEP;
 	char				sleeptime = minsleep;
 	int					timelimit = DEFAULT_TIME_LIMIT;
-	char				setmode = 0, try;
+	char				setmode = 0, offsetdetect, try;
 	int					param;
-	char				httpversion = DEFAULT_HTTP_VERSION;
+	char				*httpversion = DEFAULT_HTTP_VERSION;
 	char				ipversion = DEFAULT_IP_VERSION;
 	char				*pidfile = DEFAULT_PID_FILE;
 	FILE				*pid_file;
@@ -380,11 +374,11 @@ int main( int argc, char *argv[] ) {
 
 
 	/* Parse the command line switches and arguments */
-	while ( (param = getopt(argc, argv, "146adhi:lm:p:qstDM:P:") ) != -1)
+	while ( (param = getopt(argc, argv, "046adhi:lm:p:qstDM:P:") ) != -1)
 	switch( param ) {
 
-		case '1':			/* HTTP/1.1 */
-			httpversion = 1;
+		case '0':			/* HTTP/1.0 */
+			httpversion = "0";
 			break;
 		case '4':			/* IPv4 only */
 			ipversion = 4;
@@ -416,10 +410,11 @@ int main( int argc, char *argv[] ) {
 			break;
 		case 'p':			/* precision */
 			precision = atoi(optarg) ;
-			if ( (precision <= 0) || (precision >= 500000) ) {
+			if ( (precision <= 0) || (precision >= 500) ) {
 				printlog( 1, "Invalid precision" );
 				exit(1);
 			}
+			precision *= 1000;
 			break;
 		case 'q':			/* query only */
 			break;
@@ -458,24 +453,26 @@ int main( int argc, char *argv[] ) {
 
 	/* Exit if to many servers are specified */
 	numservers = argc - optind;
-	if ( numservers > 16 ) {
+	if ( numservers > MAX_HTTP_HOSTS ) {
 		printlog( 1, "Too many servers" );
 		exit(1);
 	}
 
     /* Calculate GMT offset from local timezone */
     time(&gmtoffset);
+	/* -1 needed to avoid division by zero in drift calculation */
+	starttime = gmtoffset - 1;
     gmtoffset -= mktime(gmtime(&gmtoffset));
 
 	/* Debug overrules daemon mode */
-	if ( debug == 1 )
+	if ( debug )
 		daemonize = 0;
 
 	/* Run as a daemonize when -D is set */
 	if ( daemonize ) {
 
 		/* Check if htpdate is already running (pid exists)*/
-		pid_file=fopen(pidfile, "r");
+		pid_file = fopen(pidfile, "r");
 		if ( pid_file ) {
 			printlog( 1, "htpdate already running" );
 			exit(1);
@@ -483,7 +480,7 @@ int main( int argc, char *argv[] ) {
 
 		pid = fork();
 		if ( pid < 0 ) {
-			printlog ( 1, "Forking error" );
+			printlog ( 1, "Fork failed" );
 			exit(1);
 		}
 
@@ -508,25 +505,25 @@ int main( int argc, char *argv[] ) {
 
 		/* Change the current working directory */
 		if ( (chdir("/")) < 0 ) {
-			printlog( 1, "Error cd /" );
+			printlog( 1, "cd / failed" );
 			exit(1);
 		}
 
 		/* Second fork, to become the grandchild */
 		pid = fork();
-
 		if ( pid < 0 ) {
-			printlog ( 1, "Forking error" );
+			printlog ( 1, "Fork failed" );
 			exit(1);
 		}
 
 		if ( pid > 0 ) {
 			/* Write a pid file */
-			pid_file=fopen( pidfile, "w" );
-			if ( !pid_file )
-				printlog( 1, "Error creating pid file" );
-			else {
-				fprintf( pid_file,"%u\n", (unsigned short)pid );
+			pid_file = fopen( pidfile, "w" );
+			if ( !pid_file ) {
+				printlog( 1, "Creating pid file failed" );
+				exit(1);
+			} else {
+				fprintf( pid_file, "%u\n", (unsigned short)pid );
 				fclose( pid_file );
 			}
 			printlog( 0, "htpdate version %s started", VERSION );
@@ -554,7 +551,7 @@ int main( int argc, char *argv[] ) {
 	/* Initialize number of received valid timestamps, good timestamps
 	   and the average of the good timestamps
 	*/
-	validtimes = goodtimes = sumtimes = 0;
+	validtimes = goodtimes = sumtimes = offsetdetect = 0;
 	if ( precision )
 		when = precision;
 	else
@@ -582,8 +579,12 @@ int main( int argc, char *argv[] ) {
 			validtimes++;
 		}
 
+		/* If we detected a time offset, set the flag */
+		if ( timestamp )
+				offsetdetect = 1;
+
 		/* Sleep for a while, unless we detected a time offset */
-		if ( daemonize && !timestamp )
+		if ( daemonize && !offsetdetect )
 			sleep( (1 << sleeptime) / numservers );
 
 		/* Take a nap, to spread polls equally within a second.
@@ -649,12 +650,21 @@ int main( int argc, char *argv[] ) {
 						abs(sumtimes) / sumtimes;
 
 			if ( setclock( timeavg, setmode ) ) {
-				printlog( 1, "Error changing time" );
+				printlog( 1, "Time change failed" );
 			};
 			/* Decrease polling interval */
 			if ( sleeptime > minsleep ) sleeptime--;
-			/* Sleep for minsleep, after a time adjust or set */
-			if ( daemonize ) sleep( 1 << minsleep );
+
+			if ( daemonize ) {
+				/* Calculate drift */
+				sumdelta += timeavg;
+				time(&now);
+				drift = (int)( sumdelta * 1000000 / (now - starttime) ) ;
+				printlog( 0, "elapsed: %li, delta: %f", now-starttime, sumdelta );
+				printlog( 0, "Drift %i PPM, %.2f sec/day", drift, drift * 0.0864 );
+				/* Sleep for minsleep, after a time adjust or set */
+				sleep( 1 << minsleep );
+			}
 		} else {
 			/* Increase polling interval */
 			if ( sleeptime < maxsleep ) sleeptime++;

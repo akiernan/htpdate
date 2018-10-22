@@ -1,6 +1,6 @@
 prefix = /usr
 bindir = ${prefix}/bin
-mandir = ${prefix}/man
+mandir = ${prefix}/share/man
 
 #CC = tcc
 #CC = icc

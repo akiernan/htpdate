@@ -1,5 +1,17 @@
-Changes in 0.8.7
+Changes in 0.8.8
 ----------------
+
+- Speeded up the poll cycle loop, once a time offset has been detected.
+- Added systematic drift to the syslog logging (daemon only).
+  The "adjtimex_parameters.sh" script may help to reduce the drift of your
+  system clock.
+- Changed "precision" from micro into milliseconds.
+- Changed manpage directory from /usr/man into /usr/share/man.
+- HTTP/1.1 has become the default
+
+
+0.8.7
+-----
 
 - Bug fix: with precision set, the time could only be adjusted
   negative (slow don).
