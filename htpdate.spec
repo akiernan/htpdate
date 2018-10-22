@@ -1,6 +1,6 @@
 Summary: HTTP based time synchronization tool
 Name: htpdate
-Version: 0.5
+Version: 0.6
 Release: 1
 License: GNU General Public License version 2
 Group: System Environment/Daemons
@@ -36,7 +36,7 @@ mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}/usr/man/man8
 
 install -m 755 htpdate %{buildroot}/usr/bin/htpdate
-install -m 644 htpdate.8.bz2 %{buildroot}/usr/man/man8/htpdate.8.bz2
+install -m 644 htpdate.8.gz %{buildroot}/usr/man/man8/htpdate.8.gz
 install -m 755 htpdate.init %{buildroot}/etc/rc.d/init.d/htpdate
 
 %clean

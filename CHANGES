@@ -1,0 +1,51 @@
+New in 0.6
+----------
+
+- New poll schedule mechanisme has been introduced!
+  This results in a better spreading of the polls in time to
+  gain some extra accuracy.
+- Removed the -p (precision) flag, because it has become obsolete with
+  the new poll scheduling mechanisme.
+- Extended 'debug mode' output with round trip time (rtt) information.
+- Sleeptime parameters are no longer in seconds, but in 2^n seconds.
+
+
+0.5
+---
+
+- Added relevant header files, so gcc -Wall compiles without warnings.
+- Added -p switch, to set the precision of htpdate. The polling rate
+  is affected by this switch (high precision -> more frequent polling).
+
+0.4
+---
+
+- Spread the individual time polls better, to gain accuracy with
+  a small number of web servers as source
+- Added debug mode, so you can value the quality of the timestamps
+  from web servers
+- Minor correction on HEAD request (removed max-age=0)
+- pid file is created
+- Added htpdate init script
+
+
+0.3
+---
+
+- Run htpdate as a daemon
+	- automatic set/adjust time, based upon offset
+	- automatic poll interval
+- Added manpage
+- Added RPM
+- Minor bug fixes
+
+0.2
+---
+
+- Htpdate can set or adjust time smoothly now, without calling external
+  programs
+
+0.1
+---
+
+- Initial release. Htpdate extracts the raw timestamp from a webserver.

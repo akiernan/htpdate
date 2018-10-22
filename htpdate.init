@@ -3,7 +3,7 @@
 # Minimal init script for htpdate
 
 PIDFILE="/var/run/htpdate.pid"
-SERVERS="www.xs4all.nl webmail.xs4all.nl www.sara.nl www.surfnet.nl www.bit.nl"
+SERVERS="www.google.com www.yahoo.com www.linux.org www.freebsd.org"
 
 # See how we were called.
 case "$1" in
