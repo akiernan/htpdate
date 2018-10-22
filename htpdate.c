@@ -1,5 +1,5 @@
 /*
-	htpdate v0.8.0
+	htpdate v0.8.2
 
 	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
@@ -49,13 +49,11 @@
 #include <stdarg.h>
 #include <limits.h>
 
-#define version 		"0.8.0"
-#define ADJ				2000.0		/* seconds to adjust 1 second offset */
-#define YEAR	 		31536000
+#define version 		"0.8.2"
 #define	BUFFER			2048
 
 
-/* By default we turn off globally the "debug mode" */
+/* By default we turn off "debug", "daemonize" and "log" mode  */
 static char		debug = 0;
 static char		daemonize = 0;
 static char		logmode = 0;
@@ -64,7 +62,7 @@ static time_t	gmtoffset;
 
 static int longcomp(const void *a, const void *b) {
 
-	return ( *(int*)a - *(int*)b );
+	return ( *(long*)a - *(long*)b );
 }
 
 
@@ -78,7 +76,7 @@ static void printlog(char is_error, char *format, ...) {
 	va_end(args);
 
     if ( logmode )
-		syslog(is_error?LOG_WARNING:LOG_INFO, buf);
+		syslog(is_error?LOG_WARNING:LOG_INFO, "%s", buf);
 	else
 		fprintf(is_error?stderr:stdout, "%s\n", buf);
 }
@@ -90,19 +88,16 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, char 
 	struct tm			tm;
 	struct timeval		timevalue = {.tv_sec = LONG_MAX};
 	struct timeval		timeofday = {.tv_sec = 0};
+	unsigned long		rtt = 0;
 	struct hostent		*hostinfo;
 	char				out_buf[256] = {};
 	char				in_buf[BUFFER] = {};
 	char				remote_time[25] = {};
 	char				url[128] = {};
 	char				*pdate = NULL;
-	double				rtt;
 
 
-	/* Connect to web server via proxy server or directly
-	   Cache-Control: no-cache "forces" an HTTP/1.1 compliant
-	   web server to return a fresh timestamp
-	*/
+	/* Connect to web server via proxy server or directly */
 	if ( proxy == NULL ) {
 		hostinfo = gethostbyname( host );
 	} else {
@@ -111,7 +106,12 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, char 
 		port = proxyport;
 	}
 
-	/* Build the HTTP/1.0 or HTTP/1.1 HEAD request */
+	/* Build the HTTP/1.0 or HTTP/1.1 HEAD request
+	   Pragma: no-cache "forces" an HTTP/1.0 (and 1.1) compliant
+	   web server to return a fresh timestamp
+	   Cache-Control: no-cache "forces" an HTTP/1.1 compliant
+	   web server to return a fresh timestamp
+	*/
 	if ( httpversion ) {
 		sprintf(out_buf, "HEAD %s/ HTTP/1.1\r\nHost: %s\r\nUser-Agent: htpdate/%s\r\nCache-Control: no-cache\r\n\r\n", url, host, version);
 	} else {
@@ -131,8 +131,8 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, char 
 		/* Wait till we reach the desired time, "when" */
 		gettimeofday(&timeofday, NULL);
 
-		/* Initialize the RTT (start of measurement) */
-		rtt = (double)(timeofday.tv_sec + when*1e-6);
+		/* Initialize RTT (start of measurement) */
+		rtt = timeofday.tv_sec;
 
 		if ( timeofday.tv_usec <= when ) {
 			usleep( when - timeofday.tv_usec );
@@ -162,7 +162,10 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, char 
 			*/
 
 			gettimeofday(&timeofday, NULL);
-			rtt -= (double)(timeofday.tv_sec + timeofday.tv_usec*1e-6);
+
+			/* rtt contains round trip time in micro seconds, now! */
+			rtt = ( timeofday.tv_sec - rtt ) * 1000000 + \
+				timeofday.tv_usec - when;
 
 			/* Look for the line that contains Date: */
 			if ( ( pdate = strstr(in_buf, "Date: ") ) != NULL ) {
@@ -179,7 +182,8 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, char 
 				/* Print host, raw timestamp, round trip time */
 				if ( debug )
 					printf("%-25s %s (%.3f) => %li\n", host, remote_time, \
-					  -rtt, timevalue.tv_sec - timeofday.tv_sec + gmtoffset );
+					  rtt * 1e-6, timevalue.tv_sec - timeofday.tv_sec \
+					  + gmtoffset );
 
 			} else {
 				printlog( 1, "%-25s no timestamp", host );
@@ -242,7 +246,7 @@ static int setclock( double timedelta, char setmode ) {
 static void showhelp() {
 	printf("htpdate version %s\n", version);
 	printf("\
-Usage: htpdate [-0|-1] [-a|-q|-s] [-d|-D] [-h|-l] [-i pid file] [-m minpoll]\n\
+Usage: htpdate [-0|-1] [-a|-q|-s] [-d|-D] [-h|-l|-t] [-i pid file] [-m minpoll]\n\
         [-M maxpoll] [-P <proxyserver>[:port]] <host[:port]> ...\n\n\
   -0    HTTP/1.0 request (default)\n\
   -1    HTTP/1.1 request\n\
@@ -253,6 +257,7 @@ Usage: htpdate [-0|-1] [-a|-q|-s] [-d|-D] [-h|-l] [-i pid file] [-m minpoll]\n\
   -D    daemon mode\n\
   -h    help\n\
   -l    use syslog for output\n\
+  -t    turn off sanity time check\n\
   -i    pid file\n\
   -m    minimum poll interval (2^m)\n\
   -M    maximum poll interval (2^M)\n\
@@ -269,10 +274,11 @@ int main( int argc, char *argv[] ) {
 	char				*host = NULL, *proxy = NULL, *portstr;
 	int					timedelta[16], timestamp;
 	int					port, proxyport = 8080;
-	int					sumtime, numservers, validtime, goodtime, mean, i;
+	int                 sumtimes, numservers, validtimes, goodtimes, mean, i;
 	double				timeavg;
-	unsigned int		nap = 0, when = 500000;
-	unsigned int		minsleep = 10, maxsleep = 18, sleeptime = minsleep;
+	int					nap = 0, when = 500000;
+	char				minsleep = 10, maxsleep = 18, sleeptime = minsleep;
+	int					timelimit = 31536000;	/* default 1 year */
 	char				setmode = 0, httpversion = 0, try, param;
 	char				*pidfile = "/var/run/htpdate.pid";
 	FILE				*pid_file;
@@ -283,12 +289,12 @@ int main( int argc, char *argv[] ) {
 
 
 	/* Parse the command line switches and arguments */
-	while ( (param = getopt(argc, argv, "01adhi:lm:qsDM:P:") ) != -1)
+	while ( (param = getopt(argc, argv, "01adhi:lm:qstDM:P:") ) != -1)
 	switch (param)
 	{
-		case '0':			/* adjust time */
+		case '0':			/* HTTP/1.0 */
 			break;
-		case '1':			/* adjust time */
+		case '1':			/* HTTP/1.1 */
 			httpversion = 1;
 			break;
 		case 'a':			/* adjust time */
@@ -317,6 +323,9 @@ int main( int argc, char *argv[] ) {
 			break;
 		case 's':			/* set time */
 			setmode = 2;
+			break;
+		case 't':			/* disable "sanity" time check */
+			timelimit = 2100000000;
 			break;
 		case 'D':			/* run as daemon */
 			daemonize = 1;
@@ -423,15 +432,13 @@ int main( int argc, char *argv[] ) {
 		when = nap = (unsigned long)(1000000 / (numservers + 1));
 
 
-	/* Infinite poll cycle loop in daemonize mode,
-	   out break out of the loop if daemonize != 1
-	*/
+	/* Infinite poll cycle loop in daemonize mode */
 	do {
 
 	/* Initialize number of received valid timestamps, good timestamps
 	   and the average of the good timestamps
 	*/
-	validtime = goodtime = sumtime = 0;
+	validtimes = goodtimes = sumtimes = 0;
 
 	/* Loop through the time sources (web servers); poll cycle */
 	for ( i = optind; i < argc; i++ ) {
@@ -450,7 +457,7 @@ int main( int argc, char *argv[] ) {
 			port = 80;
 		}
 
-		/* Retry if first poll shows timeoffset */
+		/* Retry if first poll shows time offset */
 		try = 2;
 		do {
 			timestamp = getHTTPdate( host, port, proxy, proxyport,\
@@ -458,10 +465,10 @@ int main( int argc, char *argv[] ) {
 			try--;
 		} while ( timestamp && try && daemonize );
 
-		/* Only include valid responses in timedelta[], |delta time| < year */
-		if ( ( timestamp > -YEAR ) && ( timestamp < YEAR ) ) {
-			timedelta[validtime] = timestamp;
-			validtime++;
+		/* Only include valid responses in timedelta[] */
+		if ( ( timestamp > -timelimit ) && ( timestamp < timelimit ) ) {
+			timedelta[validtimes] = timestamp;
+			validtimes++;
 		}
 
 		/* Sleep for a while, unless we detected a time offset */
@@ -480,46 +487,42 @@ int main( int argc, char *argv[] ) {
 	}
 
 	/* Sort the timedelta results */
-	qsort( &timedelta, validtime, sizeof(timedelta[0]), longcomp );
+	qsort( &timedelta, validtimes, sizeof(timedelta[0]), longcomp );
 
 	/* Mean time value */
-	mean = timedelta[validtime/2];
+	mean = timedelta[validtimes/2];
 
 	/* Filter out the bogus timevalues. A timedelta which is more than
-	   1 seconde off from mean is considered a 'false ticker'.
+	   1 seconde off from mean, is considered a 'false ticker'.
 	   NTP synced web servers can never be more off than a second.
 	*/
-	for ( i = 0; i < validtime; i++ ) {
+	for ( i = 0; i < validtimes; i++ ) {
 		if ( (timedelta[i]-mean <= 1) && (timedelta[i]-mean >= -1) ) {
-			sumtime += timedelta[i];
-			goodtime++;
+			sumtimes += timedelta[i];
+			goodtimes++;
 		}
 	}
 
 	/* Check if we have at least one valid response */
-	if ( goodtime ) {
+	if ( goodtimes ) {
 
-		timeavg = sumtime/(double)goodtime;
+		timeavg = sumtimes/(double)goodtimes;
 
 		if ( debug ) {
-			printf("#: %d, mean: %d, average: %.3f\n", goodtime, \
+			printf("#: %d, mean: %d, average: %.3f\n", goodtimes, \
 					mean, timeavg );
 			printf("Timezone: %s %s\n", tzname[0], tzname[1] );
 		}
 
 		/* Do I really need to change the time?  */
-		if ( sumtime ) {
+		if ( sumtimes ) {
 			if ( setclock( timeavg, setmode ) ) {
 				printlog( 1, "Error changing time" );
 			};
 			/* Decrease polling interval */
 			if ( sleeptime > minsleep ) sleeptime--;
-			/* ADJ is the time needed, with adjtime, to correct
-			   1 second time offset. */
-			if ( daemonize ) {
-				if (timeavg < 0 ) timeavg = -timeavg;
-				sleep( timeavg * ADJ );
-			}
+			/* Sleep for minsleep, after a time adjust or set */
+			if ( daemonize ) sleep( 1 << minsleep );
 		} else {
 			/* Increase polling interval */
 			if ( sleeptime < maxsleep ) sleeptime++;
@@ -534,7 +537,7 @@ int main( int argc, char *argv[] ) {
 
 	} while ( daemonize );		/* end of infinite while loop */
 
-	if ( !sumtime ) {
+	if ( !sumtimes ) {
 		setclock( 0, 0);
 	}
 

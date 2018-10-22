@@ -1,5 +1,20 @@
-Changes in 0.8.0
+Changes in 0.8.2
 ----------------
+
+- Fixed a major bug in offset calculation (caused by changing the rtt type
+  from double to unsigned long)
+
+
+0.8.1 (broken)
+--------------
+
+- Correction install paths in Makefile, added uninstall option
+- Added "-t" switch, which disables time sanity checking (requested for
+  devices, like supported by openwrt, which boot/startup at "epoch" time) 
+
+
+0.8.0
+-----
 
 - Lots of code clean up, eg.:
 	- compiles with the -ansi switch (for better portability, but only tested

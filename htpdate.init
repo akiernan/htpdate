@@ -13,6 +13,8 @@ case "$1" in
 	# might take too long for smooth time adjustment
 	/usr/bin/htpdate -s $SERVERS
 	/usr/bin/htpdate -D -i $PIDFILE $SERVERS
+	# or all in once
+	# /usr/bin/htpdate -D -s -i $PIDFILE $SERVERS
 	echo
 	;;
   stop)
@@ -24,7 +26,7 @@ case "$1" in
 		echo "$PIDFILE not found"
 	fi
 	echo
-	rm -f /var/run/htpdate.pid
+	rm -f $PIDFILE
 	;;
   restart)
 	$0 stop
