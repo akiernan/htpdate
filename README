@@ -1,0 +1,20 @@
+Htpdate version 0.1
+
+
+Compilation:
+
+
+make
+
+Usage:
+Print remote time:
+# ./htpdate www.microsoft.com
+Fri, 29 Oct 2004 18:48:44 GMT
+
+Set your clock to the remote clock:
+# date -s "`./htpdate.exe www.microsoft.com`"
+Fri Oct 29 20:54:44 WEDT 2004
+
+
+30-10-2004
+Eddy@cleVervest.com
