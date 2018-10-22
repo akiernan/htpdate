@@ -50,7 +50,8 @@ Usage
 -----
 
 Usage: htpdate [-4|-6] [-a|-q|-s] [-d|-D] [-1|-h|-l|-t] [-i pid file]
-         [-m minpoll] [-M maxpoll] [-P <proxyserver>[:port]] <host[:port]> ...
+         [-m minpoll] [-M maxpoll] [-p precision ] [-P <proxyserver>[:port]]
+	 <host[:port]> ...
 
 In general more web servers (multiple the same is allowed) will increase
 accuracy.

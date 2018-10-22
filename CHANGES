@@ -1,5 +1,13 @@
-Changes in 0.8.5
+Changes in 0.8.6
 ----------------
+
+- Reintroduction of the "-p" switch. The "precision" determines more accurate
+  when a time adjustment is needed. The implementation of precision is much
+  beter than the one in the past.
+
+
+0.8.5
+-----
 
 - Changed the variable type of "param" from char into int (thanks to
   Arnaud Mazin). GCC 3.4.x is less forgiving than older versions.

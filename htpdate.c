@@ -1,5 +1,5 @@
 /*
-	htpdate v0.8.5
+	htpdate v0.8.6
 
 	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
@@ -50,7 +50,7 @@
 #include <stdarg.h>
 #include <limits.h>
 
-#define VERSION 				"0.8.5"
+#define VERSION 				"0.8.6"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -330,7 +330,8 @@ static void showhelp() {
 	printf("htpdate version %s\n", VERSION);
 	printf("\
 Usage: htpdate [-4|-6] [-a|-q|-s] [-d|-D] [-1|-h|-l|-t] [-i pid file]\n\
-         [-m minpoll] [-M maxpoll] [-P <proxyserver>[:port]] <host[:port]> ...\n\n\
+         [-m minpoll] [-M maxpoll] [-p precision] [-P <proxyserver>[:port]]\n\
+         <host[:port]> ...\n\n\
   -1    HTTP/1.1 request (default HTTP/1.0)\n\
   -4    Force IPv4 name resolution only\n\
   -6    Force IPv6 name resolution only\n\
@@ -343,8 +344,9 @@ Usage: htpdate [-4|-6] [-a|-q|-s] [-d|-D] [-1|-h|-l|-t] [-i pid file]\n\
   -l    use syslog for output\n\
   -t    turn off sanity time check\n\
   -i    pid file\n\
-  -m    minimum poll interval (2^m)\n\
-  -M    maximum poll interval (2^M)\n\
+  -m    minimum poll interval (2^m sec)\n\
+  -M    maximum poll interval (2^M sec)\n\
+  -P    precision (usec)\n\
   -P    proxy server\n\
   host  web server hostname or ip address (maximum of 16)\n\
   port  port number (default 80 and 8080 for proxy server)\n\n");
@@ -365,6 +367,7 @@ int main( int argc, char *argv[] ) {
 	char				maxsleep = DEFAULT_MAX_SLEEP;
 	char				sleeptime = minsleep;
 	int					timelimit = DEFAULT_TIME_LIMIT;
+	int					precision = 0;
 	char				setmode = 0, try;
 	int					param;
 	char				httpversion = DEFAULT_HTTP_VERSION;
@@ -378,7 +381,7 @@ int main( int argc, char *argv[] ) {
 
 
 	/* Parse the command line switches and arguments */
-	while ( (param = getopt(argc, argv, "146adhi:lm:qstDM:P:") ) != -1)
+	while ( (param = getopt(argc, argv, "146adhi:lm:p:qstDM:P:") ) != -1)
 	switch( param ) {
 
 		case '1':			/* HTTP/1.1 */
@@ -412,6 +415,13 @@ int main( int argc, char *argv[] ) {
 			}
 			sleeptime = minsleep;
 			break;
+		case 'p':			/* precision */
+			precision = atoi(optarg) ;
+			if ( (precision <= 0) || (precision >= 500000) ) {
+				printlog( 1, "Invalid precision" );
+				exit(1);
+			}
+			break;
 		case 'q':			/* query only */
 			break;
 		case 's':			/* set time */
@@ -425,7 +435,7 @@ int main( int argc, char *argv[] ) {
 			logmode = 1;
 			break;
 		case 'M':			/* maximum poll interval */
-			if ( (maxsleep = atoi(optarg) ) <= 0 ) {
+			if ( ( maxsleep = atoi(optarg) ) <= 0 ) {
 				printlog( 1, "Invalid sleep time" );
 				exit(1);
 			}
@@ -530,7 +540,7 @@ int main( int argc, char *argv[] ) {
 	}
 
 	/* In case we have more than one web server defined, we
-	   spread the polls equal in time and take a "nap" in between polls.
+	   spread the polls equal within a second and take a "nap" in between.
 	*/
 	if ( numservers > 1 )
 		nap = (unsigned long)(1000000 / (numservers + 1));
@@ -542,7 +552,10 @@ int main( int argc, char *argv[] ) {
 	   and the average of the good timestamps
 	*/
 	validtimes = goodtimes = sumtimes = 0;
-	when = nap;
+	if ( precision )
+		when = precision;
+	else
+		when = nap;
 
 	/* Loop through the time sources (web servers); poll cycle */
 	for ( i = optind; i < argc; i++ ) {
@@ -561,7 +574,7 @@ int main( int argc, char *argv[] ) {
 		} while ( timestamp && try && daemonize );
 
 		/* Only include valid responses in timedelta[] */
-		if ( ( timestamp > -timelimit ) && ( timestamp < timelimit ) ) {
+		if ( abs( timestamp )  < timelimit ) {
 			timedelta[validtimes] = timestamp;
 			validtimes++;
 		}
@@ -577,8 +590,22 @@ int main( int argc, char *argv[] ) {
 		   4 servers => 0.200, 0.400, 0.600, 0.800
 		   ...
 		   nap = 1000000 / (#servers + 1)
+
+		   or when "precision" is specified, use a different algorithme
+		   Example with a precision of 200000:
+		   2 servers => 0.200, 0.800
+		   3 servers => 0.200, 0.800, 0.200
+		   4 servers => 0.200, 0.800, 0.200, 0.800
+		   ...
 		*/
-		when += nap;
+		if ( precision ) {
+				if ( when > 500000 )
+					when = precision;
+				else
+					when = 1000000 - precision;
+		} else {
+			when += nap;
+		}
 	}
 
 	/* Sort the timedelta results */
@@ -611,6 +638,13 @@ int main( int argc, char *argv[] ) {
 
 		/* Do I really need to change the time?  */
 		if ( sumtimes ) {
+			/* If a precision was specified and the time offset is small
+			   (< +-0.5 seconds), recalculate the timeavg using the precision
+			*/
+			printf("precision %d timeavg %f \n", precision, timeavg);
+			if ( precision && ( (timeavg >= -0.5) && (timeavg <= 0.5) ) )
+				timeavg = (double)precision / 1000000;
+
 			if ( setclock( timeavg, setmode ) ) {
 				printlog( 1, "Error changing time" );
 			};

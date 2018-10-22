@@ -13,7 +13,7 @@ case "$1" in
 	# might be too big for smooth time adjustment
 	/usr/bin/htpdate -s $SERVERS
 	/usr/bin/htpdate -D -i $PIDFILE $SERVERS
-	# or all in once
+	# or the above two lines combined in one
 	# /usr/bin/htpdate -D -s -i $PIDFILE $SERVERS
 	echo
 	;;
