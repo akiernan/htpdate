@@ -1,5 +1,14 @@
-Changes in 0.8.3
+Changes in 0.8.4
 ----------------
+
+- Finaly added IPv6 support!
+- If you would lose internet connectivity, htpdate would flood the system
+  (CPU and log). A patch submitted by Peter Surda, has been included.
+- Removed -0 switch (HTTP/1.0), since this is the default anyway.
+
+
+0.8.3
+-----
 
 - Fixed that "when" wasn't properly initialized in every poll cycle. This
   bug fix reduces jitter when system time is close to the correct time.
@@ -9,8 +18,8 @@ Changes in 0.8.3
 - vim setting are added to the source (set ts=4)
 
 
-Changes in 0.8.2
-----------------
+0.8.2
+-----
 
 - Fixed a major bug in offset calculation (caused by changing the rtt type
   from double to unsigned long)

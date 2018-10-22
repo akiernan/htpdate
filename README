@@ -19,9 +19,9 @@ Installation from source
 
 Tested on Linux and FreeBSD only, but should work for most Unix flavors.
 
-	$ tar zxvf htpdate-X.tar.gz
+	$ tar zxvf htpdate-X.Y.Z.tar.gz
 		or
-	$ tar jxvf htpdate-X.tar.bz2
+	$ tar jxvf htpdate-X.Y.Z.tar.bz2
 	$ cd htpdate-X
 	$ make
 	$ make install
@@ -36,9 +36,9 @@ Installation from RPM
 
 The easiest way to install (Redhat, SuSE, Mandriva etc..)
 
-	$ rpm -i htpdate-X.i386.rpm
+	$ rpm -i htpdate-X.Y.Z.i386.rpm
 		or when upgrading
-	$ rpm -Uvh htpdate-X.i386.rpm
+	$ rpm -Uvh htpdate-X.Y.Z.i386.rpm
 
 The RPM version does install a sample init script in /etc/init.d/,
 but doesn't create the symlink to start it automatic at boot time.
@@ -48,8 +48,9 @@ periodically from cron.
 
 Usage
 -----
-Usage: htpdate [-0|-1] [-a|-q|-s] [-d|-D] [-h|-l] [-i pid file] [-m minpoll]
-        [-M maxpoll] [-P <proxyserver>[:port]] <host[:port]> ...
+
+Usage: htpdate [-4|-6] [-a|-q|-s] [-d|-D] [-1|-h|-l|-t] [-i pid file]
+         [-m minpoll] [-M maxpoll] [-P <proxyserver>[:port]] <host[:port]> ...
 
 In general more web servers (multiple the same is allowed) will increase
 accuracy.
@@ -60,7 +61,6 @@ See manpage for more details.
 To do
 -----
 
-- IPv6 support (?)
 - adjtimex support (?)
 - I'm open for suggestions :)
 

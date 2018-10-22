@@ -1,5 +1,5 @@
 /*
-	htpdate v0.8.3
+	htpdate v0.8.4
 
 	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
@@ -15,11 +15,11 @@
 	Debug mode (shows raw timestamps, round trip time (rtt) and
 	time difference):
 
-	# htpdate -d www.xs4all.nl www.demon.nl
+	~# htpdate -d www.xs4all.nl www.demon.nl
 
 	Adjust time smoothly:
 
-	# htpdate -a www.xs4all.nl www.demon.nl
+	~# htpdate -a www.xs4all.nl www.demon.nl
 
 	...see manpage for more parameters
 
@@ -50,8 +50,18 @@
 #include <stdarg.h>
 #include <limits.h>
 
-#define version 		"0.8.3"
-#define	BUFFER			2048
+#define VERSION 				"0.8.4"
+#define	MAX_HTTP_HOSTS			15				/* 16 web servers */
+#define	DEFAULT_HTTP_PORT		"80"
+#define	DEFAULT_PROXY_PORT		"8080"
+#define	DEFAULT_IP_VERSION		PF_UNSPEC		/* IPv6 and IPv4 */
+#define	DEFAULT_HTTP_VERSION	0				/* HTTP/1.0 */
+#define	DEFAULT_TIME_LIMIT		31536000		/* 1 year */
+#define	DEFAULT_MIN_SLEEP		10				/* 2^10 => 17 minutes */
+#define	DEFAULT_MAX_SLEEP		18				/* 2^18 => 72 hours */
+#define	RETRY					2				/* Poll attempts */
+#define	DEFAULT_PID_FILE		"/var/run/htpdate.pid"
+#define	BUFFER					2048
 
 
 /* By default we turn off "debug", "daemonize" and "log" mode  */
@@ -64,6 +74,46 @@ static time_t	gmtoffset;
 static int longcomp(const void *a, const void *b) {
 
 	return ( *(long*)a - *(long*)b );
+}
+
+/* Split argument in hostname/IP-address and TCP port
+   Includes support for IPv6 literal addresses, RFC 2732.
+*/
+static void splithostport( char **host, char **port ) {
+	char    *rb, *rc, *lb, *lc;
+
+	lb = strchr( *host, '[');
+	rb = strrchr( *host, ']');
+	lc = strchr( *host, ':');
+	rc = strrchr( *host, ':');
+
+	/* A (litteral) IPv6 address with portnumber */
+	if ( ( rb < rc ) && ( lb != NULL ) && ( rb != NULL ) ) {
+		rb[0] = '\0';
+		rc++;
+	    *port = rc;
+		lb++;
+		*host = lb;
+		return;
+	}
+
+    /* A (litteral) IPv6 address without portnumber */
+	if ( ( rb != NULL ) && ( lb != NULL ) ) {
+		rb[0] = '\0';
+		lb++;
+		*host = lb;
+		return;
+	}
+
+	/* A IPv4 address or hostname with portnumber */
+	if ( ( rc != NULL ) && ( lc == rc ) ) {
+		rc[0] = '\0';
+		rc++;
+		*port = rc;
+		return;
+	}
+
+	return;
 }
 
 
@@ -83,14 +133,14 @@ static void printlog(char is_error, char *format, ...) {
 }
 
 
-static long getHTTPdate( char *host, int port, char *proxy, int proxyport, char httpversion, unsigned long when ) {
+static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, char httpversion, char ipversion, unsigned long when ) {
 	int					server_s;
-	struct sockaddr_in	server_addr;
+	int					rc;
+	struct addrinfo		hints, *res, *res0;
 	struct tm			tm;
 	struct timeval		timevalue = {.tv_sec = LONG_MAX};
 	struct timeval		timeofday = {.tv_sec = 0};
 	unsigned long		rtt = 0;
-	struct hostent		*hostinfo;
 	char				out_buf[256] = {};
 	char				in_buf[BUFFER] = {};
 	char				remote_time[25] = {};
@@ -99,107 +149,134 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, char 
 
 
 	/* Connect to web server via proxy server or directly */
+	memset( &hints, 0, sizeof (hints) );
+	switch( ipversion ) {
+		case 4:					/* IPv4 only */
+			hints.ai_family = AF_INET;
+			break;
+		case 6:					/* IPv6 only */
+			hints.ai_family = AF_INET6;
+			break;
+		default:				/* Support IPv6 and IPv4 name resolution */
+			hints.ai_family = DEFAULT_IP_VERSION;
+	}
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_CANONNAME;
+
 	if ( proxy == NULL ) {
-		hostinfo = gethostbyname( host );
+		rc = getaddrinfo( host, port, &hints, &res0 );
 	} else {
-		sprintf( url, "http://%s:%i", host, port);
-		hostinfo = gethostbyname( proxy );
-		port = proxyport;
+		sprintf( url, "http://%s:%s", host, port);
+		rc = getaddrinfo( proxy, proxyport, &hints, &res0 );
 	}
 
-	/* Build the HTTP/1.0 or HTTP/1.1 HEAD request
+	/* Was the hostname and service resolvable? */
+	if ( rc ) {
+		printlog( 1, "%-25s host or service unavailable", host );
+		return( LONG_MAX );
+	}
+
+	/* Build a combined HTTP/1.0 and 1.1 HEAD request
 	   Pragma: no-cache "forces" an HTTP/1.0 (and 1.1) compliant
 	   web server to return a fresh timestamp
 	   Cache-Control: no-cache "forces" an HTTP/1.1 compliant
 	   web server to return a fresh timestamp
 	*/
 	if ( httpversion ) {
-		sprintf(out_buf, "HEAD %s/ HTTP/1.1\r\nHost: %s\r\nUser-Agent: htpdate/%s\r\nCache-Control: no-cache\r\n\r\n", url, host, version);
+		sprintf(out_buf, "HEAD %s/ HTTP/1.1\r\nHost: %s\r\nUser-Agent: htpdate/%s\r\nCache-Control: no-cache\r\n\r\n", url, host, VERSION);
 	} else {
-		sprintf(out_buf, "HEAD %s/ HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\n\r\n", url, version);
+		sprintf(out_buf, "HEAD %s/ HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\n\r\n", url, VERSION);
 	}
 
-	/* Was the hostname resolvable? */
-	if ( hostinfo ) {
-
-	server_s = socket(AF_INET, SOCK_STREAM, 0);
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons( port );
-	server_addr.sin_addr = *(struct in_addr *)*hostinfo -> h_addr_list;
-
-	if ( connect(server_s, (struct sockaddr *)&server_addr, sizeof(server_addr)) == 0 ) {
-
-		/* Wait till we reach the desired time, "when" */
-		gettimeofday(&timeofday, NULL);
-
-		/* Initialize RTT (start of measurement) */
-		rtt = timeofday.tv_sec;
-
-		if ( timeofday.tv_usec <= when ) {
-			usleep( when - timeofday.tv_usec );
-		} else {
-			usleep( 1000000 + when - timeofday.tv_usec );
-			rtt++;
+	/* Loop through the available canonical names */
+	res = res0;
+	do {
+		server_s = socket( res->ai_family, res->ai_socktype, res->ai_protocol );
+		if ( server_s < 0 ) {
+			continue;
 		}
 
-		/* Send HEAD request */
-		if ( send(server_s, out_buf, strlen(out_buf), 0) < 0 )
-			printlog( 1, "Error sending" );
+		rc = connect( server_s, res->ai_addr, res->ai_addrlen );
+		if ( rc ) {
+			close( server_s);
+			server_s = -1;
+			continue;
+		}
 
-		/* Receive data from the web server
-		   The return code from recv() is the number of bytes received
+		break;
+	} while ( ( res = res->ai_next ) );
+
+
+	if ( rc ) {
+		printlog( 1, "%-25s connection failed", host );
+		return( LONG_MAX );
+	}
+
+	/* Wait till we reach the desired time, "when" */
+	gettimeofday(&timeofday, NULL);
+
+	/* Initialize RTT (start of measurement) */
+	rtt = timeofday.tv_sec;
+
+	if ( timeofday.tv_usec <= when ) {
+		usleep( when - timeofday.tv_usec );
+	} else {
+		usleep( 1000000 + when - timeofday.tv_usec );
+		rtt++;
+	}
+
+	/* Send HEAD request */
+	if ( send(server_s, out_buf, strlen(out_buf), 0) < 0 )
+		printlog( 1, "Error sending" );
+
+	/* Receive data from the web server
+	   The return code from recv() is the number of bytes received
+	*/
+	if ( recv(server_s, in_buf, BUFFER, 0) != -1 ) {
+
+		/* Assuming that network delay (server->htpdate) is neglectable,
+		   the received web server time "should" match the local time.
+
+		   From RFC 2616 paragraph 14.18
+		   ...
+		   It SHOULD represent the best available approximation
+		   of the date and time of message generation, unless the
+		   implementation has no means of generating a reasonably
+		   accurate date and time.
+		   ...
 		*/
-		if ( recv(server_s, in_buf, BUFFER, 0) != -1 ) {
 
-			/* Assuming that network delay (server->htpdate) is neglectable,
-			   the received web server time "should" match the local time.
+		gettimeofday(&timeofday, NULL);
 
-			   From RFC 2616 paragraph 14.18
-			   ...
-			   It SHOULD represent the best available approximation
-			   of the date and time of message generation, unless the
-			   implementation has no means of generating a reasonably
-			   accurate date and time.
-			   ...
-			*/
+		/* rtt contains round trip time in micro seconds, now! */
+		rtt = ( timeofday.tv_sec - rtt ) * 1000000 + \
+			timeofday.tv_usec - when;
 
-			gettimeofday(&timeofday, NULL);
+		/* Look for the line that contains Date: */
+		if ( ( pdate = strstr(in_buf, "Date: ") ) != NULL ) {
+			strncpy(remote_time, pdate + 11, 24);
 
-			/* rtt contains round trip time in micro seconds, now! */
-			rtt = ( timeofday.tv_sec - rtt ) * 1000000 + \
-				timeofday.tv_usec - when;
-
-			/* Look for the line that contains Date: */
-			if ( ( pdate = strstr(in_buf, "Date: ") ) != NULL ) {
-				strncpy(remote_time, pdate + 11, 24);
-
-				if ( strptime( remote_time, "%d %b %Y %H:%M:%S", &tm) != NULL) {
-					/* Web server timestamps are without daylight saving */
-					tm.tm_isdst = 0;
-					timevalue.tv_sec = mktime(&tm);
-				} else {
-					printlog( 1, "%-25s unknown time format", host );
-				}
-
-				/* Print host, raw timestamp, round trip time */
-				if ( debug )
-					printf("%-25s %s (%.3f) => %li\n", host, remote_time, \
-					  rtt * 1e-6, timevalue.tv_sec - timeofday.tv_sec \
-					  + gmtoffset );
-
+			if ( strptime( remote_time, "%d %b %Y %H:%M:%S", &tm) != NULL) {
+				/* Web server timestamps are without daylight saving */
+				tm.tm_isdst = 0;
+				timevalue.tv_sec = mktime(&tm);
 			} else {
-				printlog( 1, "%-25s no timestamp", host );
+				printlog( 1, "%-25s unknown time format", host );
 			}
 
-		}						/* bytes received */
+			/* Print host, raw timestamp, round trip time */
+			if ( debug )
+				printf("%-25s %s (%.3f) => %li\n", host, remote_time, \
+				  rtt * 1e-6, timevalue.tv_sec - timeofday.tv_sec \
+				  + gmtoffset );
 
-		close( server_s );
+		} else {
+			printlog( 1, "%-25s no timestamp", host );
+		}
 
-	} else 						/* connect  */
-		printlog( 1, "%-25s connection failed", host );
+	}						/* bytes received */
 
-	} else  					/* hostinfo */
-		printlog( 1, "%-25s host not found", host );
+	close( server_s );
 
 	/* Return the time delta between web server time (timevalue)
 	   and system time (timeofday)
@@ -212,8 +289,8 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, char 
 static int setclock( double timedelta, char setmode ) {
 	struct timeval		timeofday;
 
-	switch (setmode)
-	{
+	switch ( setmode ) {
+
 	case 0:						/* no time adjustment, just print time */
 		printlog( 0, "Offset %.3f seconds", timedelta );
 		return(0);
@@ -239,19 +316,21 @@ static int setclock( double timedelta, char setmode ) {
 
 		return( settimeofday(&timeofday, NULL) );
 
-	} /* switch setmode */
+	}							/* switch setmode */
+
 	return(-1);
 }
 
 
 /* Display help page */
 static void showhelp() {
-	printf("htpdate version %s\n", version);
+	printf("htpdate version %s\n", VERSION);
 	printf("\
-Usage: htpdate [-0|-1] [-a|-q|-s] [-d|-D] [-h|-l|-t] [-i pid file] [-m minpoll]\n\
-        [-M maxpoll] [-P <proxyserver>[:port]] <host[:port]> ...\n\n\
-  -0    HTTP/1.0 request (default)\n\
-  -1    HTTP/1.1 request\n\
+Usage: htpdate [-4|-6] [-a|-q|-s] [-d|-D] [-1|-h|-l|-t] [-i pid file]\n\
+         [-m minpoll] [-M maxpoll] [-P <proxyserver>[:port]] <host[:port]> ...\n\n\
+  -1    HTTP/1.1 request (default HTTP/1.0)\n\
+  -4    Force IPv4 name resolution only\n\
+  -6    Force IPv6 name resolution only\n\
   -a    adjust time smoothly\n\
   -q    query only, don't make time changes (default)\n\
   -s    set time\n\
@@ -273,16 +352,20 @@ Usage: htpdate [-0|-1] [-a|-q|-s] [-d|-D] [-h|-l|-t] [-i pid file] [-m minpoll]\
 
 
 int main( int argc, char *argv[] ) {
-	char				*host = NULL, *proxy = NULL, *portstr;
-	int					timedelta[15], timestamp;
-	int					port, proxyport = 8080;
+	char				*host = NULL, *proxy = NULL;
+	char				*port, *proxyport;
+	int					timedelta[MAX_HTTP_HOSTS], timestamp;
 	int                 sumtimes, numservers, validtimes, goodtimes, mean, i;
 	double				timeavg;
 	int					nap = 0, when = 500000;
-	char				minsleep = 10, maxsleep = 18, sleeptime = minsleep;
-	int					timelimit = 31536000;	/* default 1 year */
-	char				setmode = 0, httpversion = 0, try, param;
-	char				*pidfile = "/var/run/htpdate.pid";
+	char				minsleep = DEFAULT_MIN_SLEEP;
+	char				maxsleep = DEFAULT_MAX_SLEEP;
+	char				sleeptime = minsleep;
+	int					timelimit = DEFAULT_TIME_LIMIT;
+	char				setmode = 0, try, param;
+	char				httpversion = DEFAULT_HTTP_VERSION;
+	char				ipversion = DEFAULT_IP_VERSION;
+	char				*pidfile = DEFAULT_PID_FILE;
 	FILE				*pid_file;
 	pid_t				pid;
 
@@ -291,13 +374,17 @@ int main( int argc, char *argv[] ) {
 
 
 	/* Parse the command line switches and arguments */
-	while ( (param = getopt(argc, argv, "01adhi:lm:qstDM:P:") ) != -1)
-	switch (param)
-	{
-		case '0':			/* HTTP/1.0 */
-			break;
+	while ( (param = getopt(argc, argv, "146adhi:lm:qstDM:P:") ) != -1)
+	switch( param ) {
+
 		case '1':			/* HTTP/1.1 */
 			httpversion = 1;
+			break;
+		case '4':			/* IPv4 only */
+			ipversion = 4;
+			break;
+		case '6':			/* IPv6 only */
+			ipversion = 6;
 			break;
 		case 'a':			/* adjust time */
 			setmode = 1;
@@ -341,20 +428,13 @@ int main( int argc, char *argv[] ) {
 			break;
 		case 'P':
 			proxy = (char *)optarg;
-			portstr = strchr(proxy, ':');
-			if ( portstr != NULL ) {
-				portstr[0] = '\0';
-				portstr++;
-				if ( (proxyport = atoi(portstr)) <= 0 ) {
-					printlog( 1, "Invalid port number" );
-					exit(1);
-				}
-			}
+			proxyport = DEFAULT_PROXY_PORT;
+			splithostport( &proxy, &proxyport );
 			break;
 		case '?':
 			return 1;
 		default:
-			abort ();
+			abort();
 	}
 
 	/* Display help page, if no servers are specified */
@@ -369,7 +449,6 @@ int main( int argc, char *argv[] ) {
 		printlog( 1, "Too many servers" );
 		exit(1);
 	}
-
 
     /* Calculate GMT offset from local timezone */
     time(&gmtoffset);
@@ -405,9 +484,9 @@ int main( int argc, char *argv[] ) {
 		}
 
 		/* Close out the standard file descriptors */
-		close(STDIN_FILENO);
-		close(STDOUT_FILENO);
-		close(STDERR_FILENO);
+		close( STDIN_FILENO );
+		close( STDOUT_FILENO );
+		close( STDERR_FILENO );
 
 		signal(SIGHUP, SIG_IGN);
 
@@ -430,14 +509,14 @@ int main( int argc, char *argv[] ) {
 
 		if ( pid > 0 ) {
 			/* Write a pid file */
-			pid_file=fopen(pidfile, "w");
+			pid_file=fopen( pidfile, "w" );
 			if ( !pid_file )
 				printlog( 1, "Error creating pid file" );
 			else {
 				fprintf( pid_file,"%u\n", (unsigned short)pid );
 				fclose( pid_file );
 			}
-			printlog( 0, "htpdate version %s started", version);
+			printlog( 0, "htpdate version %s started", VERSION );
 			exit(0);
 		}
 
@@ -467,23 +546,14 @@ int main( int argc, char *argv[] ) {
 
 		/* host:port is stored in argv[i] */
 		host = (char *)argv[i];
-		portstr = strchr(host, ':');
-		if ( portstr != NULL ) {
-			portstr[0] = '\0';
-			portstr++;
-			if ( (port = atoi(portstr)) <= 0 ) {
-				printlog( 1, "Invalid port number");
-				exit(1);
-			}
-		} else {
-			port = 80;
-		}
+		port = DEFAULT_HTTP_PORT;
+		splithostport( &host, &port );
 
 		/* Retry if first poll shows time offset */
-		try = 2;
+		try = RETRY;
 		do {
 			timestamp = getHTTPdate( host, port, proxy, proxyport,\
-					httpversion, when );
+					httpversion, ipversion, when );
 			try--;
 		} while ( timestamp && try && daemonize );
 
@@ -552,6 +622,8 @@ int main( int argc, char *argv[] ) {
 
 	} else {
 		printlog( 1, "No server suitable for synchronization found" );
+		/* Sleep for minsleep to avoid flooding */
+		if ( daemonize ) sleep( 1 << minsleep );
 	}
 
 	/* Do not step through time, only adjust in daemon mode */
