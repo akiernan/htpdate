@@ -1,5 +1,5 @@
 /*
-	htpdate v1.1.0
+	htpdate v1.1.1
 
 	Eddy Vervest <eddy@vervest.org>
 	http://www.vervest.org/htp
@@ -52,7 +52,7 @@
 #include <pwd.h>
 #include <grp.h>
 
-#define VERSION 				"1.1.0"
+#define VERSION 				"1.1.1"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -150,7 +150,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	struct timeval		timeofday;
 	struct timespec		sleepspec, remainder;
 	long				rtt;
-	char				buffer[BUFFERSIZE];
+	char				buffer[BUFFERSIZE] = { '\0' };
 	char				remote_time[25] = { '\0' };
 	char				url[URLSIZE] = { '\0' };
 	char				*pdate = NULL;
@@ -240,7 +240,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	/* Receive data from the web server
 	   The return code from recv() is the number of bytes received
 	*/
-	if ( recv(server_s, buffer, BUFFERSIZE, 0) != -1 ) {
+	if ( recv(server_s, buffer, BUFFERSIZE - 1, 0) != -1 ) {
 
 		/* Assuming that network delay (server->htpdate) is neglectable,
 		   the received web server time "should" match the local time.
@@ -261,7 +261,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 			timeofday.tv_usec - when;
 
 		/* Look for the line that contains Date: */
-		if ( (pdate = strstr(buffer, "Date: ")) != NULL ) {
+		if ( (pdate = strstr(buffer, "Date: ")) != NULL && strlen( pdate ) >= 35 ) {
 			strncpy(remote_time, pdate + 11, 24);
 
 			if ( strptime( remote_time, "%d %b %Y %T", &tm) != NULL) {
