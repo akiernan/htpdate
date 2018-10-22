@@ -1,5 +1,5 @@
 /*
-	htpdate v0.9.3
+	htpdate v1.0.0
 
 	Eddy Vervest <eddy@cleVervest.com>
 	http://www.clevervest.com/htp
@@ -53,7 +53,7 @@
 #include <pwd.h>
 #include <grp.h>
 
-#define VERSION 				"0.9.3"
+#define VERSION 				"1.0.0"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -181,7 +181,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	/* Was the hostname and service resolvable? */
 	if ( rc ) {
 		printlog( 1, "%s host or service unavailable", host );
-		return(0);
+		return(0);				/* Assume correct time */
 	}
 
 	/* Build a combined HTTP/1.0 and 1.1 HEAD request
@@ -212,7 +212,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 
 	if ( rc ) {
 		printlog( 1, "%s connection failed", host );
-		return(0);
+		return(0);				/* Assume correct time */
 	}
 
 	/* Wait till we reach the desired time, "when" */
@@ -609,8 +609,6 @@ int main( int argc, char *argv[] ) {
 		/* Query only mode doesn't exist in daemon mode */
 		if ( !setmode )
 			setmode = 1;
-	} else {
-		precision = 0;
 	}
 
 	/* Now we are root, we drop the privileges (if specified) */
@@ -622,12 +620,17 @@ int main( int argc, char *argv[] ) {
     gmtoffset -= mktime(gmtime(&gmtoffset));
 
 	/* In case we have more than one web server defined, we
-	   spread the polls equal within a second and take a "nap" in between.
+	   spread the polls equal within a second and take a "nap" in between
 	*/
 	if ( numservers > 1 )
-		nap = 1000000 / (numservers + 1);
-	else
+		if ( precision && (numservers > 2) )
+			nap = (1000000 - 2*precision) / (numservers - 1);
+		else
+			nap = 1000000 / (numservers + 1);
+	else {
 		precision = 0;
+		nap = 500000;
+	}
 
 	/* Infinite poll cycle loop in daemonize mode */
 	do {
@@ -665,7 +668,7 @@ int main( int argc, char *argv[] ) {
 
 		/* If we detected a time offset, set the flag */
 		if ( timestamp )
-				offsetdetect = 1;
+			offsetdetect = 1;
 
 		/* Sleep for a while, unless we detected a time offset */
 		if ( daemonize && !offsetdetect )
@@ -679,21 +682,9 @@ int main( int argc, char *argv[] ) {
 		   ...
 		   nap = 1000000 / (#servers + 1)
 
-		   or when "precision" is specified, use a different algorithm
-		   Example with a precision of 200000:
-		   2 servers => 0.200, 0.800
-		   3 servers => 0.200, 0.800, 0.200
-		   4 servers => 0.200, 0.800, 0.200, 0.800
-		   ...
+		   or when "precision" is specified, a different algorithm is used
 		*/
-		if ( precision ) {
-			if ( when > 500000 )
-				when = precision;
-			else
-				when = 1000000 - precision;
-		} else {
-			when += nap;
-		}
+		when += nap;
 	}
 
 	/* Sort the timedelta results */
@@ -738,7 +729,6 @@ int main( int argc, char *argv[] ) {
 
 			/* Drop root privileges again */
 			if ( sw_uid ) seteuid( sw_uid );
-			if ( sw_gid ) setegid( sw_gid );
 
 			if ( daemonize ) {
 				if ( starttime ) {
@@ -756,18 +746,16 @@ int main( int argc, char *argv[] ) {
 
 						/* Drop root privileges again */
 						if ( sw_uid ) seteuid( sw_uid );
-						if ( sw_gid ) setegid( sw_gid );
 					}
 				} else {
 					starttime = time(NULL);
 				}
 
-				/* Decrease polling interval */
-				if ( sleeptime > minsleep )
-					sleeptime >>= 1;
+				/* Decrease polling interval to minimum */
+				sleeptime = minsleep;
 
-				/* Sleep for minsleep, after a time adjust or set */
-				sleep( minsleep );
+				/* Sleep for 20 minutes, after a time adjust or set */
+				sleep( DEFAULT_MIN_SLEEP );
 			}
 		} else {
 			/* Increase polling interval */

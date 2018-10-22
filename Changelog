@@ -1,5 +1,12 @@
-Changes in 0.9.3
+Changes in 1.0.0
 ----------------
+
+- Cleanup/simplified the code.
+- Again a more robust implementation of the "-p" (precision) switch.
+
+
+0.9.3
+-----
 
 - Bug fixes: poll loop could be become close to zero in case of a "connection
 failed". Sleeptime wasn't correct in case all hosts fail.
