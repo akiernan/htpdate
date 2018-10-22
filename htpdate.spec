@@ -1,6 +1,6 @@
 Summary: HTTP based time synchronization tool
 Name: htpdate
-Version: 0.6
+Version: 0.6.1
 Release: 1
 License: GNU General Public License version 2
 Group: System Environment/Daemons

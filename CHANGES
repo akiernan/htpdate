@@ -1,5 +1,11 @@
-New in 0.6
-----------
+Changes in 0.6.1
+------------
+
+- Code clean up, use global variable 'timezone'
+
+
+0.6
+---
 
 - New poll schedule mechanisme has been introduced!
   This results in a better spreading of the polls in time to

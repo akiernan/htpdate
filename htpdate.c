@@ -1,7 +1,7 @@
 /*
-	htpdate v0.6
+	htpdate v0.6.1
 
-	Eddy Vervest <Eddy@cleVervest.com>
+	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
 
 	Synchronize local workstation with time offered by remote web servers
@@ -48,7 +48,7 @@
 #include <math.h>
 #include <limits.h>
 
-#define version 		"0.6"
+#define version 		"0.6.1"
 #define	BUFFER			2048
 
 
@@ -82,7 +82,7 @@ static void printlog(int is_error, char *format, ...) {
 }
 
 
-static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsigned long when, time_t gmtoffset ) {
+static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsigned long when ) {
 	int					server_s;
 	struct sockaddr_in	server_addr;
 	struct tm			tm;
@@ -164,7 +164,7 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsig
 				strncpy(remote_time, pdate + 11, 24);
 
 				if ( strptime( remote_time, "%d %b %Y %H:%M:%S", &tm) != NULL) {
-					/* Web server timestamps are without daylight savings */
+					/* Web server timestamps are without daylight saving */
 					tm.tm_isdst = 0;
 					timevalue.tv_sec = mktime(&tm);
 				}
@@ -172,7 +172,7 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsig
 				/* Print host, raw timestamp, round trip time */
 				if ( debug )
 					printf("%-25s %s (%.3f) => %li\n", host, remote_time, \
-					  -rtt, timevalue.tv_sec - timeofday.tv_sec + gmtoffset );
+					  -rtt, timevalue.tv_sec - timeofday.tv_sec - timezone );
 
 			} else {
 				printlog( 1, "%-25s response without timestamp", host );
@@ -191,7 +191,7 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsig
 	/* Return the time delta between web server time (timevalue)
 	   and system time (timeofday)
 	*/
-	return( timevalue.tv_sec - timeofday.tv_sec + gmtoffset );
+	return( timevalue.tv_sec - timeofday.tv_sec - timezone );
 			
 }
 
@@ -250,7 +250,6 @@ static void showhelp() {
 
 
 int main( int argc, char *argv[] ) {
-	time_t				gmtoffset;
 	pid_t				pid;
 	char				*host = NULL, *proxy = NULL, *portstr = NULL;
 	long				timedelta[16], timestamp;
@@ -339,10 +338,6 @@ int main( int argc, char *argv[] ) {
 		exit(1);
 	}
 
-	/* Calculate GMT offset from local timezone */
-	time(&gmtoffset);
-	gmtoffset -= mktime(gmtime(&gmtoffset));
-
 	/* Run as a daemonize when -D is set and -d isn't */
 	if ( daemonize && (!debug) ) {
 
@@ -416,7 +411,7 @@ int main( int argc, char *argv[] ) {
 			port = 80;
 		}
 
-		timestamp = getHTTPdate( host, port, proxy, proxyport, when, gmtoffset);
+		timestamp = getHTTPdate( host, port, proxy, proxyport, when );
 
 		/* Only include valid responses in timedelta[], |delta time| < year */
 		if ( labs(timestamp) < 31536000 ) {
@@ -457,7 +452,7 @@ int main( int argc, char *argv[] ) {
 		if ( debug ) {
 			printf("#: %d, mean: %li, average: %.3f\n", goodtime, \
 					timedelta[validtime/2], timeavg);
-			printf("Timezone: GMT%+li \n", gmtoffset/3600 );
+			printf("Timezone: %s %s\n", tzname[0], tzname[1] );
 		}
 
 		/* If the time offset is bigger than the threshold,
