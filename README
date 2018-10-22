@@ -11,14 +11,26 @@ proxy servers. Accuracy of htpdate will be within 0.5 seconds (better
 with multiple servers). If this is not good enough for you, try the
 ntpd package.
 
+New in 0.3
+==========
+
+- Run htpdate as a daemon
+	- automatic set/adjust time, based upon offset
+	- automatic poll interval
+- Added manpage
+- Added RPM
+- Minor bug fixes
+
 
 Installation
 ------------
 
 Tested on Linux only, but should work on most Unix systems.
 
-# tar zxvf htpdate-0.2.tar.gz
-# cd htpdate-0.2
+# tar zxvf htpdate-0.3.tar.gz
+or
+# tar jxvf htpdate-0.3.tar.gz
+# cd htpdate-0.3
 # make
 # make install
 
@@ -26,7 +38,8 @@ Tested on Linux only, but should work on most Unix systems.
 Usage
 -----
 
-htpdate [-P proxy server] [-p proxy port] <web server 1> <web server 2>
+htpdate [-aqsxD] [-m sec] [-M sec] [-t step threshold]
+        [-P <proxyserver>[:port]] <host[:port]> [host[:port]]...
 
 In general more web servers (multiple the same is allowed) will increase
 accuracy.
@@ -49,11 +62,10 @@ January 2005	A new HTP branch, this one, with less complex code and better
 To do
 -----
 
-- Daemon mode
 - Better math to create a more accurate time
 - Documentation, manpages etc
 
 
 Eddy Vervest
 Eddy@cleVervest.com
-15 January 2005
+20 January 2005
