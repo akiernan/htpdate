@@ -1,6 +1,6 @@
 Summary: HTTP based time synchronization tool
 Name: htpdate
-Version: 0.4
+Version: 0.5
 Release: 1
 License: GNU General Public License version 2
 Group: System Environment/Daemons
@@ -16,8 +16,8 @@ with web servers as reference time source. Htpdate will synchronize your
 computer's time by extracting timestamps from HTTP headers found
 in web servers responses. Htpdate can be used as a daemon, to keep your
 computer synchronized.
-Accuracy of htpdate is usually around 0.5 seconds (better with multiple
-servers). If this is not good enough for you, try the ntpd package.
+Accuracy of htpdate is usually better than 0.5 seconds (even better with
+multiple servers). If this is not good enough for you, try the ntpd package.
 
 Install the htp package if you need tools for keeping your system's
 time synchronized via the HTP protocol. Htpdate works also through
@@ -36,7 +36,7 @@ mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}/usr/man/man8
 
 install -m 755 htpdate %{buildroot}/usr/bin/htpdate
-install -m 644 htpdate.8.gz %{buildroot}/usr/man/man8/htpdate.8.gz
+install -m 644 htpdate.8.bz2 %{buildroot}/usr/man/man8/htpdate.8.bz2
 install -m 755 htpdate.init %{buildroot}/etc/rc.d/init.d/htpdate
 
 %clean

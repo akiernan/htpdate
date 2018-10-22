@@ -6,12 +6,20 @@ with web servers as reference time source. Htpdate will synchronize your
 computer's time by extracting timestamps from HTTP headers found
 in web servers responses. Htpdate can be used as a daemon, to keep your
 computer synchronized.
-Accuracy of htpdate is usually around 0.5 seconds (better with multiple
+The accuracy of htpdate is at least -+0.5 seconds (better with multiple
 servers). If this is not good enough for you, try the ntpd package.
 
 Install the htp package if you need tools for keeping your system's
 time synchronized via the HTP protocol. Htpdate works also through
 proxy servers.
+
+
+New in 0.5
+==========
+
+- Added relevant header files, so gcc -Wall compiles without warnings.
+- Added -p switch, to set the precision of htpdate. The polling rate
+  is affected by this switch (high precision -> more frequent polling).
 
 
 New in 0.4
@@ -40,12 +48,12 @@ New in 0.3
 Installation
 ------------
 
-Tested on Linux only, but should work on most Unix systems.
+Tested on Linux and FreeBSD only, but should work on most Unix systems.
 
-# tar zxvf htpdate-0.3.tar.gz
+# tar zxvf htpdate-0.5.tar.gz
 or
-# tar jxvf htpdate-0.3.tar.gz
-# cd htpdate-0.3
+# tar jxvf htpdate-0.5.tar.bz2
+# cd htpdate-0.5
 # make
 # make install
 
@@ -53,11 +61,13 @@ or
 Usage
 -----
 
-htpdate [-adhqsxD] [-i pid file] [-m sec] [-M sec] [-t step threshold]
-  [-P <proxyserver>[:port]] <host[:port]> [host[:port]]...
+Usage: htpdate [-adhqsxD] [-i pid file] [-m sec] [-M sec] [-p precision]
+  [-t set threshold] [-P <proxyserver>[:port]] <host[:port]> [host[:port]]...
 
 In general more web servers (multiple the same is allowed) will increase
 accuracy.
+
+See manpage for more detail.
 
 
 To do
@@ -67,5 +77,5 @@ To do
 
 
 Eddy Vervest
-Eddy@cleVervest.com
-27 January 2005
+eddy@clevervest.com
+4 February 2005

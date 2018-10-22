@@ -1,19 +1,20 @@
-CC = gcc
-CFLAGS = -O2
+prefix = /usr/local
+bindir = ${exec_prefix}/bin
+mandir = ${prefix}/man
 
-bindir = /usr/bin
-mandir = /usr/man
+CC = gcc
+CFLAGS = -Wall -Os
 
 INSTALL = /usr/bin/install -c
 
-BINS = htpdate
+all: htpdate
 
-all: $(BINS)
-htpdate: htpdate.o
+htpdate: htpdate.c
 	$(CC) $(CFLAGS) -o htpdate htpdate.c
-
-htpdate.o: htpdate.c
 
 install: all
 	$(INSTALL) -m 755 htpdate $(bindir)/htpdate
 	$(INSTALL) -m 644 htpdate.8.gz $(mandir)/man8/htpdate.8.gz
+
+clean:
+	rm -rf htpdate

@@ -9,7 +9,7 @@ SERVERS="www.xs4all.nl webmail.xs4all.nl www.sara.nl www.surfnet.nl www.bit.nl"
 case "$1" in
   start)
 	echo -n "Starting htpdate: "
-	/usr/bin/htpdate -D $SERVERS
+	/usr/bin/htpdate -D -i $PIDFILE $SERVERS
 	echo
 	;;
   stop)
