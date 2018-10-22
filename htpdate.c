@@ -1,5 +1,5 @@
 /*
-	htpdate v1.1.1
+	htpdate v1.1.2
 
 	Eddy Vervest <eddy@vervest.org>
 	http://www.vervest.org/htp
@@ -52,7 +52,7 @@
 #include <pwd.h>
 #include <grp.h>
 
-#define VERSION 				"1.1.1"
+#define VERSION 				"1.1.2"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -138,6 +138,21 @@ static void printlog( int is_error, char *format, ... ) {
 		syslog(is_error?LOG_WARNING:LOG_INFO, "%s", buf);
 	else
 		fprintf(is_error?stderr:stdout, "%s\n", buf);
+}
+
+
+/* Drop or elevate privileges */
+static void swuid( int id ) {
+	if ( seteuid( id ) ) {
+		printlog( 1, "seteuid() %i", id );
+		exit(1);
+	}
+}
+static void swgid( int id ) {
+	if ( setegid( id ) ) {
+		printlog( 1, "setegid() %i", id );
+		exit(1);
+	}
 }
 
 
@@ -315,12 +330,8 @@ static int setclock( double timedelta, int setmode ) {
 		printlog( 0, "Adjusting %.3f seconds", timedelta );
 
 		/* Become root */
-		if ( seteuid(0) ) {
-			printlog( 1, "seteuid()" );
-			exit(1);
-		} else {
-			return( adjtime(&timeofday, NULL) );
-		}
+		swuid(0);
+		return( adjtime(&timeofday, NULL) );
 
 	case 2:					/* Set time */
 		printlog( 0, "Setting %.3f seconds", timedelta );
@@ -334,12 +345,8 @@ static int setclock( double timedelta, int setmode ) {
 		printlog( 0, "Set: %s", asctime(localtime(&timeofday.tv_sec)) );
 
 		/* Become root */
-		if ( seteuid(0) ) {
-			printlog( 1, "seteuid()" );
-			exit(1);
-		} else {
-			return( settimeofday(&timeofday, NULL) );
-		}
+		swuid(0);
+		return( settimeofday(&timeofday, NULL) );
 
 	case 3:					/* Set frequency, but first an adjust */
 		return( setclock( timedelta, 1 ) );
@@ -373,12 +380,8 @@ static int htpdate_adjtimex( double drift ) {
 	tmx.modes = MOD_FREQUENCY;
 
 	/* Become root */
-	if ( seteuid(0) ) {
-		printlog( 1, "seteuid()" );
-		exit(1);
-	} else {
-		return( ntp_adjtime(&tmx) );
-	}
+	swuid(0);
+	return( ntp_adjtime(&tmx) );
 
 }
 
@@ -638,8 +641,8 @@ int main( int argc, char *argv[] ) {
 	}
 
 	/* Now we are root, we drop the privileges (if specified) */
-	if ( sw_uid ) seteuid( sw_uid );
-	if ( sw_gid ) setegid( sw_gid );
+	if ( sw_gid ) swgid( sw_gid );
+	if ( sw_uid ) swuid( sw_uid );
 
     /* Calculate GMT offset from local timezone */
     time(&gmtoffset);
@@ -770,7 +773,7 @@ int main( int argc, char *argv[] ) {
 					printlog( 1, "Time change failed" );
 
 			/* Drop root privileges again */
-			if ( sw_uid ) seteuid( sw_uid );
+			swuid( sw_uid );
 
 			if ( daemonize ) {
 				if ( starttime ) {
@@ -787,7 +790,7 @@ int main( int argc, char *argv[] ) {
 							printlog( 1, "Frequency change failed" );
 
 						/* Drop root privileges again */
-						if ( sw_uid ) seteuid( sw_uid );
+						swuid( sw_uid );
 					}
 				} else {
 					starttime = time(NULL);

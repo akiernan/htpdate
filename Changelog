@@ -1,5 +1,12 @@
-Changes in 1.1.1
+Changes in 1.1.2
 ----------------
+
+- Security fix: setegid wasn't always applied
+- Fixed compiler warning 'ignoring return value' for recent gcc versions
+
+
+1.1.1
+-----
 
 - Fixed out of bound issue and a missing null-terminated string (thanks to Tobias Stöckmann)
 
