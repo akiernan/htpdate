@@ -1,5 +1,5 @@
 /*
-	htpdate v0.7.0
+	htpdate v0.7.1
 
 	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
@@ -48,7 +48,7 @@
 #include <math.h>
 #include <limits.h>
 
-#define version 		"0.7.0"
+#define version 		"0.7.1"
 #define	BUFFER			2048
 
 
@@ -484,6 +484,7 @@ int main( int argc, char *argv[] ) {
 	if ( timeavg != 0 ) {
 		sleeptime--;
 		if ( sleeptime < minsleep ) sleeptime = minsleep;
+		sleep( 1 << sleeptime );
 	} else {
 		sleeptime++;
 		if ( sleeptime > maxsleep ) sleeptime = maxsleep;

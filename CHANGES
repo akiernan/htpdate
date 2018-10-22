@@ -1,4 +1,11 @@
-Changes in 0.7.0
+Changes in 0.7.1
+----------------
+
+- Bug fix. Poll cycle could become very very short (seconds...) in some
+  cases.
+
+
+0.7.0
 ----------------
 
 - The polling mechanisme has been improved once more :)
