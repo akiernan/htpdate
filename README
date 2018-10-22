@@ -35,18 +35,6 @@ from cron. For a daily time sync it would look something like this:
 5 3 * * * /usr/bin/htpdate -s www.linux.org www.freebsd.org
 
 
-Installation from RPM
----------------------
-
-The easiest way to install (Redhat, SuSE, Mandriva etc..)
-
-	$ rpm -Uvh htpdate-x.y.z.i386.rpm
-
-By default the htpdate daemon is activated (with chkconfig).
-If you only want to run htpdate from cron, disable the htpdate service
-with 'chkconfig --del htpdate'.
-
-
 Usage
 -----
 

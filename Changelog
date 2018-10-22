@@ -1,7 +1,14 @@
-Changes in 1.0.7
+Changes in 1.1.0
 ----------------
 
-- Fixed a part of the incorrect bug fix in 1.0.6.
+- Removed Debian and RPM specific information
+- Fixed manpage issues (thanks to Eriberto)
+
+
+1.0.7
+-----
+
+- Fixed an incorrect bug fix in 1.0.6.
 
 
 1.0.6

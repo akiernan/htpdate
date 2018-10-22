@@ -12,14 +12,15 @@ STRIP = /usr/bin/strip -s
 all: htpdate
 
 htpdate: htpdate.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o htpdate htpdate.c
+	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o htpdate htpdate.c
 
 install: all
 	$(STRIP) htpdate
 	mkdir -p $(bindir)
 	$(INSTALL) -m 755 htpdate $(bindir)/htpdate
 	mkdir -p $(mandir)/man8
-	$(INSTALL) -m 644 htpdate.8.gz $(mandir)/man8/htpdate.8.gz
+	$(INSTALL) -m 644 htpdate.8 $(mandir)/man8/htpdate.8
+	gzip -f -9 $(mandir)/man8/htpdate.8
 
 clean:
 	rm -rf htpdate
