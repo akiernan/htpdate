@@ -1,5 +1,5 @@
 /*
-	htpdate v1.0.1
+	htpdate v1.0.2
 
 	Eddy Vervest <eddy@cleVervest.com>
 	http://www.clevervest.com/htp
@@ -52,7 +52,7 @@
 #include <pwd.h>
 #include <grp.h>
 
-#define VERSION 				"1.0.1"
+#define VERSION 				"1.0.2"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -151,8 +151,8 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	struct timespec		sleepspec, remainder;
 	long				rtt;
 	char				buffer[BUFFERSIZE];
-	char				remote_time[25] = {};
-	char				url[URLSIZE] = {};
+	char				remote_time[25] = { '\0' };
+	char				url[URLSIZE] = { '\0' };
 	char				*pdate = NULL;
 
 
@@ -313,8 +313,12 @@ static int setclock( double timedelta, int setmode ) {
 		printlog( 0, "Adjusting %.3f seconds", timedelta );
 
 		/* Become root */
-		seteuid(0);
-		return( adjtime(&timeofday, NULL) );
+		if ( seteuid(0) ) {
+			printlog( 1, "seteuid()" );
+			exit(1);
+		} else {
+			return( adjtime(&timeofday, NULL) );
+		}
 
 	case 2:					/* Set time */
 		printlog( 0, "Setting %.3f seconds", timedelta );
@@ -328,8 +332,12 @@ static int setclock( double timedelta, int setmode ) {
 		printlog( 0, "Set: %s", asctime(localtime(&timeofday.tv_sec)) );
 
 		/* Become root */
-		seteuid(0);
-		return( settimeofday(&timeofday, NULL) );
+		if ( seteuid(0) ) {
+			printlog( 1, "seteuid()" );
+			exit(1);
+		} else {
+			return( settimeofday(&timeofday, NULL) );
+		}
 
 	case 3:					/* Set frequency, but first an adjust */
 		return( setclock( timedelta, 1 ) );
@@ -363,8 +371,13 @@ static int htpdate_adjtimex( double drift ) {
 	tmx.modes = MOD_FREQUENCY;
 
 	/* Become root */
-	seteuid(0);
-	return( ntp_adjtime(&tmx) );
+	if ( seteuid(0) ) {
+		printlog( 1, "seteuid()" );
+		exit(1);
+	} else {
+		return( ntp_adjtime(&tmx) );
+	}
+
 }
 
 
@@ -436,8 +449,10 @@ static void runasdaemon( char *pidfile ) {
 	umask(0);
 
 	/* Change the current working directory */
-	if ( chdir("/") < 0 )
+	if ( chdir("/") < 0 ) {
+		printlog( 1, "chdir()" );
 		exit(1);
+	}
 
 	/* Second fork, to become the grandchild */
 	pid = fork();
@@ -464,14 +479,15 @@ static void runasdaemon( char *pidfile ) {
 
 
 int main( int argc, char *argv[] ) {
-	char				*host = NULL, *proxy = NULL;
-	char				*port, *proxyport;
+	char				*host = NULL, *proxy = NULL, *proxyport = NULL;
+	char				*port;
 	char				*httpversion = DEFAULT_HTTP_VERSION;
 	char				*pidfile = DEFAULT_PID_FILE;
 	char				*user = NULL, *userstr = NULL, *group = NULL;
-	double				timeavg, drift = 0;
+	double				timeavg;
+	double				sumtimes, drift = 0;
 	int					timedelta[MAX_HTTP_HOSTS], timestamp;
-	int                 sumtimes, numservers, validtimes, goodtimes, mean;
+	int                 numservers, validtimes, goodtimes, mean;
 	int					nap = 0, when = 500000, precision = 0;
 	int					setmode = 0, burstmode = 0, try, offsetdetect;
 	int					i, burst, param;
@@ -740,7 +756,7 @@ int main( int argc, char *argv[] ) {
 		}
 
 		/* Do I really need to change the time?  */
-		if ( sumtimes || !daemonize ) {
+		if ( (sumtimes > 0) || !daemonize ) {
 			/* If a precision was specified and the time offset is small
 			   (< +-1 second), adjust the time with the value of precision
 			*/

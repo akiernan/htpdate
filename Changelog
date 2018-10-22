@@ -1,11 +1,18 @@
-Changes in 1.0.1
+Changes in 1.0.2
 ----------------
+
+- Fixed a buffer overflow when time offset get to large (reported by Kim Hansen)
+  https://dev.openwrt.org/cgi-bin/trac.fcgi/ticket/3940
+
+
+1.0.1
+-----
 
 - Added "burst mode" (-b) to enhance accuracy.
 - Extended debug output
 - Removed potential buffer overflows vulnerabilities.
 - Replaced usleep by nanosleep (which is more portable).
-- Included debian support.
+- Included debian package.
 
 
 1.0.0
@@ -124,9 +131,9 @@ failed". Sleeptime wasn't correct in case all hosts fail.
 -----
 
 - Lots of code clean up, eg.:
-	- compiles with the -ansi switch (for better portability, but only tested
-      on Linux and FreeBSD)
-    - Compiles with Tiny C Compiler (tcc) and Intel C compiler (icc)
+	- compiles with the -ansi switch (for better portability, but only
+	  tested on Linux and FreeBSD)
+	- Compiles with Tiny C Compiler (tcc) and Intel C compiler (icc)
 	- Restored compatibility with FreeBSD (timezone calculation).
 - A second poll is made if a time offset has been detected.
 - Removed the switches "-t" and "-x". In daemon mode htpdate will only adjust
@@ -152,7 +159,7 @@ failed". Sleeptime wasn't correct in case all hosts fail.
 
 
 0.7.0
-----------------
+-----
 
 - The polling mechanisme has been improved once more :)
   As of this version polls are also spread within the polling cycle.
@@ -195,6 +202,7 @@ failed". Sleeptime wasn't correct in case all hosts fail.
 - Added -p switch, to set the precision of htpdate. The polling rate
   is affected by this switch (high precision -> more frequent polling).
 
+
 0.4
 ---
 
@@ -217,11 +225,13 @@ failed". Sleeptime wasn't correct in case all hosts fail.
 - Added RPM
 - Minor bug fixes
 
+
 0.2
 ---
 
 - Htpdate can set or adjust time smoothly now, without calling external
   programs
+
 
 0.1
 ---

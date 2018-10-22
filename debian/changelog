@@ -1,5 +1,5 @@
-htpdate (1.0.1) unstable; urgency=low
+htpdate (1.0.2) stable; urgency=low
 
-  * Initial Release.
+  * Buffer overflow fix.
 
- -- Eddy Vervest <eddy@cleVervest.com>  Thu, 28 Apr 2008 21:11:24 +0200
+ -- Eddy Vervest <eddy@cleVervest.com>  Mon, 01 Sep 2008 22:40:45 +0200 
