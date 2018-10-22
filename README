@@ -1,15 +1,30 @@
 Htpdate
 -------
 
-The HTTP Time Protocol (HTP) is used to synchronize a computer's
-time with web servers as reference time source. Htp will synchronize
-your computer's time to Greenwich Mean Time (GMT) via HTTP headers
-from web servers.
-The htpdate package includes a program for retrieving the date
-and time from remote machines via a network. Htpdate works through
-proxy servers. Accuracy of htpdate will be within 0.5 seconds (better
-with multiple servers). If this is not good enough for you, try the
-ntpd package.
+The HTTP Time Protocol (HTP) is used to synchronize a computer's time
+with web servers as reference time source. Htpdate will synchronize your
+computer's time by extracting timestamps from HTTP headers found
+in web servers responses. Htpdate can be used as a daemon, to keep your
+computer synchronized.
+Accuracy of htpdate is usually around 0.5 seconds (better with multiple
+servers). If this is not good enough for you, try the ntpd package.
+
+Install the htp package if you need tools for keeping your system's
+time synchronized via the HTP protocol. Htpdate works also through
+proxy servers.
+
+
+New in 0.4
+==========
+
+- Spread the individual time polls better, to gain accuracy with
+  a small number of web servers as source
+- Added debug mode, so you can value the quality of the timestamps
+  from web servers
+- Minor correction on HEAD request (removed max-age=0)
+- pid file is created
+- Added htpdate init script
+
 
 New in 0.3
 ==========
@@ -38,34 +53,19 @@ or
 Usage
 -----
 
-htpdate [-aqsxD] [-m sec] [-M sec] [-t step threshold]
-        [-P <proxyserver>[:port]] <host[:port]> [host[:port]]...
+htpdate [-adhqsxD] [-i pid file] [-m sec] [-M sec] [-t step threshold]
+  [-P <proxyserver>[:port]] <host[:port]> [host[:port]]...
 
 In general more web servers (multiple the same is allowed) will increase
 accuracy.
-
-
-History
--------
-
-March 2004		Initial Perl version, Webtime, released on freshmeat.
-August 2004		Renamed the Webtime project into HTTP Time Protocol.
-				HTP started to use LWP and became mature
-October 2004	Initial release of htp written in C
-November 2004	Roy Keene took over the development of the C version
-				and I became tester.
-January 2005	A new HTP branch, this one, with less complex code and better
-				accuracy IMHO :).
-				Libconfig is no longer required.
 
 
 To do
 -----
 
 - Better math to create a more accurate time
-- Documentation, manpages etc
 
 
 Eddy Vervest
 Eddy@cleVervest.com
-20 January 2005
+27 January 2005

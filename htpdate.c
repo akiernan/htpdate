@@ -1,5 +1,5 @@
 /*
-	htpdate v0.3
+	htpdate v0.4
 
 	Eddy Vervest <Eddy@cleVervest.com>
 	http://www.clevervest.com
@@ -8,7 +8,7 @@
 
 	Extract date/time stamp from web server response
 	This program works with the timestamps return by web servers,
-	formatted as specified by HTTP/1.1 (RFC 2616).
+	formatted as specified by HTTP/1.1 (RFC 2616, RFC 1123).
 
 	Example usage. 
 
@@ -31,12 +31,14 @@
 #include <time.h>
 #include <syslog.h>
 
-#define version 		"0.3"
+#define version 		"0.4"
 #define	BUFFER			2048
 
 
+/* By default we turn off globally the "debug mode" */
+static char debug = 0;
 
-static int doublecomp(const void *p1, const void *p2) {
+static char doublecomp(const void *p1, const void *p2) {
 	double i = *((double *)p1);
 	double j = *((double *)p2);
 
@@ -56,7 +58,7 @@ static double dtime( struct timeval t1, struct timeval t2 ) {
 }
 
 
-static double getHTTPdate( char *host, unsigned int port, char *proxy, unsigned int proxyport ) {
+static double getHTTPdate( char *host, unsigned short port, char *proxy, unsigned short proxyport ) {
 	unsigned int		server_s;
 	struct sockaddr_in	server_addr;
 	struct tm			tm;
@@ -64,22 +66,25 @@ static double getHTTPdate( char *host, unsigned int port, char *proxy, unsigned 
 	struct hostent		*hostinfo;
 	char				out_buf[BUFFER];	// Output buffer for HEAD request
 	char				in_buf[BUFFER];		// Input buffer for HTTP response
-	char				remote_time[25];	// holds timestamp RFC1123 format
+	char				remote_time[24];	// holds timestamp RFC1123 format
 	char				*pdate = NULL;
 
 
-	/* Initialize web server timevalue and current time*/
+	/* Initialize web server timevalue and current time */
 	timevalue.tv_sec = LONG_MAX;
 	timevalue.tv_usec = 0;
 	timeofday.tv_sec = 0;
 	timeofday.tv_usec = 0;
 
-	/* Connect to web server via proxy server or not */
+	/* Connect to web server via proxy server or directly
+	   Pragma: no-cache "forces" an HTTP/1.0 or HTTP/1.1 compliant
+	   web server to return a fresh timestamp
+	*/
 	if ( proxy == NULL ) {
-		sprintf(out_buf, "HEAD / HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\nCache-Control: Max-age=0\r\n\r\n", version);
+		sprintf(out_buf, "HEAD / HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\n\r\n", version);
 		hostinfo = gethostbyname(host);
 	} else {
-		sprintf(out_buf, "HEAD http://%s:%i HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\nCache-Control: Max-age=0\r\n\r\n", host, port, version);
+		sprintf(out_buf, "HEAD http://%s:%i HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\n\r\n", host, port, version);
 		hostinfo = gethostbyname(proxy);
 		port = proxyport;
 	}
@@ -103,7 +108,7 @@ static double getHTTPdate( char *host, unsigned int port, char *proxy, unsigned 
 		if ( recv(server_s, in_buf, BUFFER, 0) != -1 ) {
 
 			/* Assuming server and (one way) network delay is
-			   neglectable... < 20ms
+			   neglectable.
 			*/
 			gettimeofday(&timeofday, NULL);
 
@@ -122,15 +127,20 @@ static double getHTTPdate( char *host, unsigned int port, char *proxy, unsigned 
 			close(server_s);
 		}
 
-	} /* connect  */
+	} else 						/* connect  */
+		fprintf( stderr, "Connection to %s failed", host );
 
-	} /* hostinfo */
+	} else  					/* hostinfo */
+		fprintf( stderr, "Host %s not found\n", host );
+				
+	if ( debug == 1 )
+		printf("%s: %s", host, remote_time);
 
 	return( dtime( timeofday, timevalue) );
 
 }
 
-static int setclock( double timedelta, int setmode, int daemon ) {
+static char setclock( double timedelta, char setmode, char daemon ) {
 	struct timeval		timeofday;
 
 
@@ -166,15 +176,15 @@ switch (setmode) {
 		timeofday.tv_usec = (long)((timedelta - (long)timedelta) * 1000000);	
 
 		if ( daemon == 0 ) {
-			printf ( "Set time to: %s", asctime(localtime(&timeofday.tv_sec)) );
+			printf( "Set time to: %s", asctime(localtime(&timeofday.tv_sec)) );
 		} else {
-			syslog ( LOG_NOTICE, "Set time to: %s", asctime(localtime(&timeofday.tv_sec)));
+			syslog( LOG_NOTICE, "Set time to: %s", asctime(localtime(&timeofday.tv_sec)));
 		}
 
 		return (settimeofday(&timeofday, NULL));
 
 	default:
-		fprintf( stderr, "Error setclock" );
+		fprintf( stderr, "Error setclock\n" );
 
 } /* switch setmode */
 
@@ -186,20 +196,8 @@ static void showhelp() {
 
 	/* display help page */
 	printf("htpdate v%s\n", version);
-	printf("Usage: htpdate [-aqsxD] [-m sec] [-M sec] [-t step threshold]\n");
+	printf("Usage: htpdate [-adhqsxD] [-i pid file] [-m sec] [-M sec] [-t step threshold]\n");
 	printf("         [-P <proxyserver>[:port]] <host[:port]> [host[:port]]...\n\n");
-	printf("       -a  adjust time smoothly\n");
-	printf("       -h  show this help\n");
-	printf("       -m  minimum sleeptime (default 4096 sec)\n");
-	printf("       -q  query only, time not set (default)\n");
-	printf("       -s  set time immediate\n");
-	printf("       -t  threshold time step (default 5 sec)\n");
-	printf("       -x  never step time, only adjust\n");
-	printf("       -D  run htpdate as a daemon\n");
-	printf("       -M  maximum sleeptime (default 12 days)\n");
-	printf("       -P  proxy server\n");
-	printf("     host  web server\n");
-	printf("     port  port number\n\n");
 
 	return;
 
@@ -210,79 +208,89 @@ int main( int argc, char *argv[] ) {
 	time_t				gmtoffset;
 	char				*host = NULL, *proxy = NULL, *portstr = NULL;
 	double				timedelta[32] = {0};
-	double				timeavg = 0;
-	double				threshold = 5.0;
-	unsigned int		port = 80, proxyport = 8080;
-	unsigned long		minsleep=4096, maxsleep=1048576, sleeptime=minsleep;
-	int					c, index;
-	int					setmode = 0, i = 0, daemon = 0;
+	char				buf[10];
+	double				timeavg = 0, threshold = 5;
+	unsigned short		port = 80, proxyport = 8080;
+	unsigned long		minsleep=4096, maxsleep=1048576, sleeptime=minsleep, \
+						nap = 0;
+	pid_t				pid;
+	char				c, index;
+	char				setmode = 0, i = 0, daemon = 0;
+	char				*pidfile = "/var/run/htpdate.pid";
+	FILE				*pid_file;
 
 	extern char *optarg;
 	extern int optind, optopt;
 
 
 /* Parse the command line switches and arguments */
-while ((c = getopt (argc, argv, "ahm:qst:xDM:P:")) != -1)
-		switch (c)
-		{
-			case 'a':			/* adjust time */
-				setmode = 1;
-				break;
-			case 'h':			/* show help */
-				showhelp();
-				exit(0);
-			case 'm':
-				if ( (minsleep = atol(optarg) ) <= 0 ) {
-						fprintf( stderr, "Invalid sleep time\n" );
-						exit(1);
+while ((c = getopt (argc, argv, "adhi:m:qst:xDM:P:")) != -1)
+	switch (c)
+	{
+		case 'a':			/* adjust time */
+			setmode = 1;
+			break;
+		case 'd':			/* turn debug on */
+			debug = 1;
+			break;
+		case 'h':			/* show help */
+			showhelp();
+			exit(0);
+		case 'i':			/* pid file help */
+			pidfile = (char *)optarg;
+			break;
+		case 'm':			/* minimum poll interval */
+			if ( (minsleep = atol(optarg) ) <= 0 ) {
+				fprintf( stderr, "Invalid sleep time\n" );
+				exit(1);
+			}
+			sleeptime = minsleep;
+			break;
+		case 'q':			/* query only */
+			setmode = 0;
+			break;
+		case 's':			/* set time */
+			setmode = 2;
+			break;
+		case 't':			/* step threshold value in seconds */
+			threshold = atof(optarg);
+			break;
+		case 'x':			/* never set time, only slew */
+			setmode = 3;
+			break;
+		case 'D':			/* run as daemon */
+			setmode = 1;
+			daemon = 1;
+			break;
+		case 'M':			/* maximum poll interval */
+			if ( (maxsleep = atol(optarg) ) <= 0 ) {
+				fprintf( stderr, "Invalid sleep time\n" );
+				exit(1);
+			}
+			break;
+		case 'P':
+			proxy = (char *)optarg;
+			portstr = strchr(proxy, ':');
+			if ( portstr != NULL ) {
+				portstr[0] = '\0';
+				portstr++;
+				if ( (proxyport = atoi(portstr)) <= 0 ) {
+					fprintf( stderr, "Invalid port number\n" );
+					exit(1);
 				}
-				sleeptime = minsleep;
-				break;
-			case 'q':			/* query only */
-				setmode = 0;
-				break;
-			case 's':			/* set time */
-				setmode = 2;
-				break;
-			case 't':			/* step threshold value in seconds */
-				threshold = atof(optarg);
-				break;
-			case 'x':			/* never set time, only slew */
-				setmode = 3;
-				break;
-			case 'D':			/* run as daemon */
-				setmode = 1;
-				daemon = 1;
-				break;
-			case 'M':
-				if ( (maxsleep = atol(optarg) ) <= 0 ) {
-						fprintf( stderr, "Invalid sleep time\n" );
-						exit(1);
-				}
-				break;
-			case 'P':
-				proxy = (char *)optarg;
-				portstr = strchr(proxy, ':');
-				if ( portstr != NULL ) {
-					portstr[0] = '\0';
-					portstr++;
-					if ( (proxyport = atoi(portstr)) <= 0 ) {
-						fprintf( stderr, "Invalid port number\n" );
-						exit(1);
-					}
-				} else {
-					proxyport = 8080;
-				}
-				break;
-			case '?':
-			if (isprint (optopt))
-				fprintf (stderr, "Unknown option `-%c'.\n", optopt);
-			else
-				fprintf (stderr, "Unknown option character `\\x%x'.\n", optopt);
-			return 1;
-			default:
-			abort ();
-		}
+			} else {
+				proxyport = 8080;
+			}
+			break;
+		case '?':
+		if (isprint (optopt))
+			fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+		else
+			fprintf (stderr, "Unknown option character `\\x%x'.\n", optopt);
+		return 1;
+		default:
+		abort ();
+	}
 
 	/* display help page */
 	if ( argv[optind] == NULL ) {
@@ -295,8 +303,15 @@ while ((c = getopt (argc, argv, "ahm:qst:xDM:P:")) != -1)
 	gmtoffset -= mktime(gmtime(&gmtoffset));
 
 	/* Daemonize the program */
-	if ( daemon == 1 ) {
-		switch ( fork() ) {
+	if ( (daemon == 1) && (debug != 1) ) {
+		/* Check if htpdate is already running (pid exists)*/
+		pid_file=fopen(pidfile, "r");
+		if (pid_file) {
+			fprintf( stderr,"htpdate is already running\n" );
+			exit(1);
+		}
+
+		switch ( (pid=fork()) ) {
 		case -1:
 			perror ("fork()");
 			exit(3);
@@ -309,16 +324,31 @@ while ((c = getopt (argc, argv, "ahm:qst:xDM:P:")) != -1)
 			}
 			break;
 		default:
-			syslog ( LOG_NOTICE, "htpdate v%s started...", version);
+			/* Write a pid file */
+			pid_file=fopen(pidfile, "w");
+			if (!pid_file)
+				fprintf( stderr,"Cannot create pid file\n" );
+			else {
+				fprintf(pid_file,"%d\n", pid);
+				fclose(pid_file);
+			}
+			syslog( LOG_NOTICE, "htpdate v%s started.\n", version);
 			return 0;
 		}
 	}
+
+	/* In case we have more than one web server defined, we
+	   try to spread the polls a little and take a nap in between polls.
+	   A poll cycle should never finish within a second (accuracy)
+	*/
+	if ( (argc - optind) > 1 )
+		nap = 1000000 / (argc - optind);
 
 	/* infinite loop in daemon mode,
 	   out break out of the loop if daemon != 1 */
 	while ( 1 ) {
 
-	/* loop through the servers */
+	/* loop through the time sources => web servers */
 	for (index = optind; index < argc; index++) {
 
 		/* host:port is stored in argv[index] */
@@ -336,6 +366,12 @@ while ((c = getopt (argc, argv, "ahm:qst:xDM:P:")) != -1)
 		}
 
 		timedelta[index - optind] = getHTTPdate( host, port, proxy, proxyport ) + gmtoffset;
+		if ( debug == 1 )
+			printf(" => %f\n", timedelta[index - optind] );
+
+		/* sleep between polls, to spread polls equally within a second */
+		usleep( nap );
+
 	}
 
 	/* sort the timedelta results */
@@ -362,6 +398,9 @@ while ((c = getopt (argc, argv, "ahm:qst:xDM:P:")) != -1)
 	if ( i > 0 ) {
 		timeavg /= i;
 
+		if ( debug == 1 )
+			printf("mean: %f, average: %f\n", timedelta[c/2], timeavg);
+
 		/* if the time offset is bigger than the threshold,
 		   use set not adjust, unless -x was set
 		*/
@@ -386,7 +425,7 @@ while ((c = getopt (argc, argv, "ahm:qst:xDM:P:")) != -1)
 
 
 	/* Was the -D daemon switch set? Break the while loop if it wasn't */
-	if ( daemon == 0 ) {
+	if ( (daemon == 0) || (debug == 1) ) {
 		break;
 	}
 
