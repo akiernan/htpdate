@@ -1,4 +1,17 @@
 CC = gcc
+CFLAGS = -O2
 
-htpdate: htpdate-0.1.c
-	$(CC) -o htpdate htpdate-0.1.c
+bindir = /usr/bin
+
+INSTALL = /usr/bin/install -c
+
+BINS = htpdate
+
+all: $(BINS)
+htpdate: htpdate.o
+	$(CC) $(CFLAGS) -o htpdate htpdate.c
+
+htpdate.o: htpdate.c
+
+install: all
+	$(INSTALL) -m 755 htpdate $(bindir)/htpdate

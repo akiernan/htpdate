@@ -1,20 +1,59 @@
-Htpdate version 0.1
+Htpdate
+-------
+
+The HTTP Time Protocol (HTP) is used to synchronize a computer's
+time with web servers as reference time source. Htp will synchronize
+your computer's time to Greenwich Mean Time (GMT) via HTTP headers
+from web servers.
+The htpdate package includes a program for retrieving the date
+and time from remote machines via a network. Htpdate works through
+proxy servers. Accuracy of htpdate will be within 0.5 seconds (better
+with multiple servers). If this is not good enough for you, try the
+ntpd package.
 
 
-Compilation:
+Installation
+------------
+
+Tested on Linux only, but should work on most Unix systems.
+
+# tar zxvf htpdate-0.2.tar.gz
+# cd htpdate-0.2
+# make
+# make install
 
 
-make
+Usage
+-----
 
-Usage:
-Print remote time:
-# ./htpdate www.microsoft.com
-Fri, 29 Oct 2004 18:48:44 GMT
+htpdate [-P proxy server] [-p proxy port] <web server 1> <web server 2>
 
-Set your clock to the remote clock:
-# date -s "`./htpdate.exe www.microsoft.com`"
-Fri Oct 29 20:54:44 WEDT 2004
+In general more web servers (multiple the same is allowed) will increase
+accuracy.
 
 
-30-10-2004
+History
+-------
+
+March 2004		Initial Perl version, Webtime, released on freshmeat.
+August 2004		Renamed the Webtime project into HTTP Time Protocol.
+				HTP started to use LWP and became mature
+October 2004	Initial release of htp written in C
+November 2004	Roy Keene took over the development of the C version
+				and I became tester.
+January 2005	A new HTP branch, this one, with less complex code and better
+				accuracy IMHO :).
+				Libconfig is no longer required.
+
+
+To do
+-----
+
+- Daemon mode
+- Better math to create a more accurate time
+- Documentation, manpages etc
+
+
+Eddy Vervest
 Eddy@cleVervest.com
+15 January 2005
