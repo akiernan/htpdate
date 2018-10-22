@@ -1,5 +1,5 @@
 /*
-	htpdate v0.8.2
+	htpdate v0.8.3
 
 	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
@@ -38,6 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <netinet/in.h>
@@ -49,7 +50,7 @@
 #include <stdarg.h>
 #include <limits.h>
 
-#define version 		"0.8.2"
+#define version 		"0.8.3"
 #define	BUFFER			2048
 
 
@@ -142,7 +143,8 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, char 
 		}
 
 		/* Send HEAD request */
-		send(server_s, out_buf, strlen(out_buf), 0);
+		if ( send(server_s, out_buf, strlen(out_buf), 0) < 0 )
+			printlog( 1, "Error sending" );
 
 		/* Receive data from the web server
 		   The return code from recv() is the number of bytes received
@@ -262,7 +264,7 @@ Usage: htpdate [-0|-1] [-a|-q|-s] [-d|-D] [-h|-l|-t] [-i pid file] [-m minpoll]\
   -m    minimum poll interval (2^m)\n\
   -M    maximum poll interval (2^M)\n\
   -P    proxy server\n\
-  host  web server hostname or ip address\n\
+  host  web server hostname or ip address (maximum of 16)\n\
   port  port number (default 80 and 8080 for proxy server)\n\n");
 
 	return;
@@ -272,7 +274,7 @@ Usage: htpdate [-0|-1] [-a|-q|-s] [-d|-D] [-h|-l|-t] [-i pid file] [-m minpoll]\
 
 int main( int argc, char *argv[] ) {
 	char				*host = NULL, *proxy = NULL, *portstr;
-	int					timedelta[16], timestamp;
+	int					timedelta[15], timestamp;
 	int					port, proxyport = 8080;
 	int                 sumtimes, numservers, validtimes, goodtimes, mean, i;
 	double				timeavg;
@@ -355,11 +357,19 @@ int main( int argc, char *argv[] ) {
 			abort ();
 	}
 
-	/* Display help page */
+	/* Display help page, if no servers are specified */
 	if ( argv[optind] == NULL ) {
 		showhelp();
 		exit(1);
 	}
+
+	/* Exit if to many servers are specified */
+	numservers = argc - optind;
+	if ( numservers > 16 ) {
+		printlog( 1, "Too many servers" );
+		exit(1);
+	}
+
 
     /* Calculate GMT offset from local timezone */
     time(&gmtoffset);
@@ -381,7 +391,40 @@ int main( int argc, char *argv[] ) {
 
 		pid=fork();
 		if ( pid < 0 ) {
-			printlog ( 1, "error forkiing" );
+			printlog ( 1, "Forking error" );
+			exit(1);
+		}
+
+		if ( pid > 0 ) {
+			exit(0);
+		}
+
+		/* Create a new SID for the child process */
+		if ( setsid () < 0 ) {
+			exit(1);
+		}
+
+		/* Close out the standard file descriptors */
+		close(STDIN_FILENO);
+		close(STDOUT_FILENO);
+		close(STDERR_FILENO);
+
+		signal(SIGHUP, SIG_IGN);
+
+		/* Change the file mode mask */
+		umask(0);
+
+		/* Change the current working directory */
+		if ((chdir("/")) < 0) {
+			printlog( 1, "Error cd /" );
+			exit(1);
+		}
+
+		/* Second fork, to become the grandchild */
+		pid = fork();
+
+		if ( pid < 0 ) {
+			printlog ( 1, "Forking error" );
 			exit(1);
 		}
 
@@ -395,30 +438,10 @@ int main( int argc, char *argv[] ) {
 				fclose( pid_file );
 			}
 			printlog( 0, "htpdate version %s started", version);
-
 			exit(0);
 		}
 
-		/* Change the file mode mask */
-		umask(0);
-
-		/* Create a new SID for the child process */
-		if ( setsid () < 0 ) {
-			exit(1);
-		}
-
-		/* Change the current working directory */
-		if ((chdir("/")) < 0) {
-			printlog( 1, "Error cd /" );
-			exit(1);
-		}
-
-		/* Close out the standard file descriptors */
-		close(STDIN_FILENO);
-		close(STDOUT_FILENO);
-		close(STDERR_FILENO);
-
-		/* Query mode doesn't exist in daemon mode */
+		/* Query only mode doesn't exist in daemon mode */
 		if ( setmode == 0 )
 			setmode = 1;
 
@@ -427,10 +450,8 @@ int main( int argc, char *argv[] ) {
 	/* In case we have more than one web server defined, we
 	   spread the polls equal in time and take a "nap" in between polls.
 	*/
-	numservers = argc - optind;
 	if ( numservers > 1 )
-		when = nap = (unsigned long)(1000000 / (numservers + 1));
-
+		nap = (unsigned long)(1000000 / (numservers + 1));
 
 	/* Infinite poll cycle loop in daemonize mode */
 	do {
@@ -439,6 +460,7 @@ int main( int argc, char *argv[] ) {
 	   and the average of the good timestamps
 	*/
 	validtimes = goodtimes = sumtimes = 0;
+	when = nap;
 
 	/* Loop through the time sources (web servers); poll cycle */
 	for ( i = optind; i < argc; i++ ) {
@@ -538,9 +560,11 @@ int main( int argc, char *argv[] ) {
 	} while ( daemonize );		/* end of infinite while loop */
 
 	if ( !sumtimes ) {
-		setclock( 0, 0);
+		setclock( 0, 0 );
 	}
 
 	exit(0);
 
 }
+
+/* vi:set ts=4: */

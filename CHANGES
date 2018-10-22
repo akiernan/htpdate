@@ -1,3 +1,14 @@
+Changes in 0.8.3
+----------------
+
+- Fixed that "when" wasn't properly initialized in every poll cycle. This
+  bug fix reduces jitter when system time is close to the correct time.
+- Added missing "-t" switch to the manpage.
+- Added warning message if more than 16 servers are specified.
+- Htpdate double forks now, like a proper daemon :)
+- vim setting are added to the source (set ts=4)
+
+
 Changes in 0.8.2
 ----------------
 
