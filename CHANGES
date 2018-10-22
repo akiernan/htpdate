@@ -1,5 +1,14 @@
-Changes in 0.8.6
+Changes in 0.8.7
 ----------------
+
+- Bug fix: with precision set, the time could only be adjusted
+  negative (slow don).
+- Fixed undesired effects in (rare) cases when using only a few servers.
+- Exit code changed to 1 if no server was found (requested by Supernaut).
+
+
+0.8.6
+-----
 
 - Reintroduction of the "-p" switch. The "precision" determines more accurate
   when a time adjustment is needed. The implementation of precision is much

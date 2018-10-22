@@ -1,5 +1,5 @@
 /*
-	htpdate v0.8.6
+	htpdate v0.8.7
 
 	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
@@ -50,7 +50,7 @@
 #include <stdarg.h>
 #include <limits.h>
 
-#define VERSION 				"0.8.6"
+#define VERSION 				"0.8.7"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -346,7 +346,7 @@ Usage: htpdate [-4|-6] [-a|-q|-s] [-d|-D] [-1|-h|-l|-t] [-i pid file]\n\
   -i    pid file\n\
   -m    minimum poll interval (2^m sec)\n\
   -M    maximum poll interval (2^M sec)\n\
-  -P    precision (usec)\n\
+  -p    precision (usec)\n\
   -P    proxy server\n\
   host  web server hostname or ip address (maximum of 16)\n\
   port  port number (default 80 and 8080 for proxy server)\n\n");
@@ -362,12 +362,11 @@ int main( int argc, char *argv[] ) {
 	int					timedelta[MAX_HTTP_HOSTS], timestamp;
 	int                 sumtimes, numservers, validtimes, goodtimes, mean, i;
 	double				timeavg;
-	int					nap = 0, when = 500000;
+	int					nap = 0, when = 500000, precision = 0;
 	char				minsleep = DEFAULT_MIN_SLEEP;
 	char				maxsleep = DEFAULT_MAX_SLEEP;
 	char				sleeptime = minsleep;
 	int					timelimit = DEFAULT_TIME_LIMIT;
-	int					precision = 0;
 	char				setmode = 0, try;
 	int					param;
 	char				httpversion = DEFAULT_HTTP_VERSION;
@@ -537,6 +536,8 @@ int main( int argc, char *argv[] ) {
 		/* Query only mode doesn't exist in daemon mode */
 		if ( ! setmode ) setmode = 1;
 
+	} else {
+		precision = 0;
 	}
 
 	/* In case we have more than one web server defined, we
@@ -544,6 +545,8 @@ int main( int argc, char *argv[] ) {
 	*/
 	if ( numservers > 1 )
 		nap = (unsigned long)(1000000 / (numservers + 1));
+	else
+		precision = 0;
 
 	/* Infinite poll cycle loop in daemonize mode */
 	do {
@@ -591,7 +594,7 @@ int main( int argc, char *argv[] ) {
 		   ...
 		   nap = 1000000 / (#servers + 1)
 
-		   or when "precision" is specified, use a different algorithme
+		   or when "precision" is specified, use a different algorithm
 		   Example with a precision of 200000:
 		   2 servers => 0.200, 0.800
 		   3 servers => 0.200, 0.800, 0.200
@@ -639,11 +642,11 @@ int main( int argc, char *argv[] ) {
 		/* Do I really need to change the time?  */
 		if ( sumtimes ) {
 			/* If a precision was specified and the time offset is small
-			   (< +-0.5 seconds), recalculate the timeavg using the precision
+			   (< +-1 second), adjust the time with the value of precision
 			*/
-			printf("precision %d timeavg %f \n", precision, timeavg);
-			if ( precision && ( (timeavg >= -0.5) && (timeavg <= 0.5) ) )
-				timeavg = (double)precision / 1000000;
+			if ( precision && ( abs(sumtimes) < goodtimes ) )
+				timeavg = (double)precision / 1000000 * \
+						abs(sumtimes) / sumtimes;
 
 			if ( setclock( timeavg, setmode ) ) {
 				printlog( 1, "Error changing time" );
@@ -660,7 +663,10 @@ int main( int argc, char *argv[] ) {
 	} else {
 		printlog( 1, "No server suitable for synchronization found" );
 		/* Sleep for minsleep to avoid flooding */
-		if ( daemonize ) sleep( 1 << minsleep );
+		if ( daemonize )
+			sleep( 1 << minsleep );
+		else
+			exit(1);
 	}
 
 	/* After first poll cycle do not step through time, only adjust */

@@ -22,7 +22,7 @@ Tested on Linux and FreeBSD only, but should work for most Unix flavors.
 	$ tar zxvf htpdate-X.Y.Z.tar.gz
 		or
 	$ tar jxvf htpdate-X.Y.Z.tar.bz2
-	$ cd htpdate-X
+	$ cd htpdate-X.Y.Z
 	$ make
 	$ make install
 
