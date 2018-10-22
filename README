@@ -14,29 +14,47 @@ time synchronized via the HTP protocol. Htpdate works also through
 proxy servers.
 
 
-Installation
-------------
+Installation from source
+------------------------
 
 Tested on Linux and FreeBSD only, but should work for most Unix flavors.
 
-# tar zxvf htpdate-0.x.x.tar.gz
-or
-# tar jxvf htpdate-0.x.x.tar.bz2
-# cd htpdate-0.x.x
-# make
-# make install
+	$ tar zxvf htpdate-X.tar.gz
+		or
+	$ tar jxvf htpdate-X.tar.bz2
+	$ cd htpdate-X
+	$ make
+	$ make install
+
+A sample init script in /etc/init.d/ is included, but not installed
+automaticcaly.
+This give the user the option to run htpdate as daemon or run it
+periodically from cron. 
+
+Installation from RPM
+---------------------
+
+The easiest way to install (Redhat, SuSE, Mandriva etc..)
+
+	$ rpm -i htpdate-X.i386.rpm
+		or when upgrading
+	$ rpm -Uvh htpdate-X.i386.rpm
+
+The RPM version does install a sample init script in /etc/init.d/,
+but doesn't create the symlink to start it automatic at boot time.
+This give the user the option to run htpdate as daemon or run it
+periodically from cron. 
 
 
 Usage
 -----
-
-Usage: htpdate [-adhqsxD] [-i pid file] [-m sec] [-M sec] [-t set threshold]
-         [-P <proxyserver>[:port]] <host[:port]> [host[:port]]...
+Usage: htpdate [-0|-1] [-a|-q|-s] [-d|-D] [-h|-l] [-i pid file] [-m minpoll]
+        [-M maxpoll] [-P <proxyserver>[:port]] <host[:port]> ...
 
 In general more web servers (multiple the same is allowed) will increase
 accuracy.
 
-See manpage for more detail.
+See manpage for more details.
 
 
 To do
@@ -48,4 +66,3 @@ To do
 
 
 Eddy Vervest <eddy@clevervest.com>
-April 2005

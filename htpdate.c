@@ -1,5 +1,5 @@
 /*
-	htpdate v0.7.2
+	htpdate v0.8.0
 
 	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
@@ -12,7 +12,8 @@
 
 	Example usage:
 
-	Debug mode (shows raw timestamps, rtt and time difference):
+	Debug mode (shows raw timestamps, round trip time (rtt) and
+	time difference):
 
 	# htpdate -d www.xs4all.nl www.demon.nl
 
@@ -38,6 +39,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -45,16 +47,19 @@
 #include <time.h>
 #include <syslog.h>
 #include <stdarg.h>
-#include <math.h>
 #include <limits.h>
 
-#define version 		"0.7.2"
+#define version 		"0.8.0"
+#define ADJ				2000.0		/* seconds to adjust 1 second offset */
+#define YEAR	 		31536000
 #define	BUFFER			2048
 
 
 /* By default we turn off globally the "debug mode" */
-static int debug = 0;
-static int daemonize = 0;
+static char		debug = 0;
+static char		daemonize = 0;
+static char		logmode = 0;
+static time_t	gmtoffset;
 
 
 static int longcomp(const void *a, const void *b) {
@@ -63,8 +68,8 @@ static int longcomp(const void *a, const void *b) {
 }
 
 
-/* Printlog is a slighty adjust version from the orginal from rdate */
-static void printlog(int is_error, char *format, ...) {
+/* Printlog is a slighty modified version used in rdate */
+static void printlog(char is_error, char *format, ...) {
 	va_list args;
 	int n;
 	char buf[128];
@@ -72,41 +77,45 @@ static void printlog(int is_error, char *format, ...) {
 	n = vsnprintf(buf, sizeof(buf), format, args);
 	va_end(args);
 
-	if (n < 1)
-		return; /* Error, which we can't report because this _is_ the error
-	            reporting mechanism */
-    if ( daemonize )
+    if ( logmode )
 		syslog(is_error?LOG_WARNING:LOG_INFO, buf);
 	else
 		fprintf(is_error?stderr:stdout, "%s\n", buf);
 }
 
 
-static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsigned long when ) {
+static long getHTTPdate( char *host, int port, char *proxy, int proxyport, char httpversion, unsigned long when ) {
 	int					server_s;
 	struct sockaddr_in	server_addr;
 	struct tm			tm;
 	struct timeval		timevalue = {.tv_sec = LONG_MAX};
 	struct timeval		timeofday = {.tv_sec = 0};
 	struct hostent		*hostinfo;
-	double				rtt;
-	char				out_buf[BUFFER];	// Output buffer for HEAD request
-	char				in_buf[BUFFER];		// Input buffer for HTTP response
-	char				remote_time[24];	// holds timestamp RFC1123 format
+	char				out_buf[256] = {};
+	char				in_buf[BUFFER] = {};
+	char				remote_time[25] = {};
+	char				url[128] = {};
 	char				*pdate = NULL;
+	double				rtt;
 
 
 	/* Connect to web server via proxy server or directly
-	   Pragma: no-cache "forces" an HTTP/1.0 or HTTP/1.1 compliant
+	   Cache-Control: no-cache "forces" an HTTP/1.1 compliant
 	   web server to return a fresh timestamp
 	*/
 	if ( proxy == NULL ) {
-		sprintf(out_buf, "HEAD / HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\nConnection: Keep-Alive\r\n\r\n", version);
 		hostinfo = gethostbyname( host );
 	} else {
-		sprintf(out_buf, "HEAD http://%s:%i HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\nConnection: Keep-Alive\r\n\r\n", host, port, version);
+		sprintf( url, "http://%s:%i", host, port);
 		hostinfo = gethostbyname( proxy );
 		port = proxyport;
+	}
+
+	/* Build the HTTP/1.0 or HTTP/1.1 HEAD request */
+	if ( httpversion ) {
+		sprintf(out_buf, "HEAD %s/ HTTP/1.1\r\nHost: %s\r\nUser-Agent: htpdate/%s\r\nCache-Control: no-cache\r\n\r\n", url, host, version);
+	} else {
+		sprintf(out_buf, "HEAD %s/ HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\n\r\n", url, version);
 	}
 
 	/* Was the hostname resolvable? */
@@ -140,9 +149,6 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsig
 		*/
 		if ( recv(server_s, in_buf, BUFFER, 0) != -1 ) {
 
-			/* Close the "persistent" connection */
-			close( server_s );
-
 			/* Assuming that network delay (server->htpdate) is neglectable,
 			   the received web server time "should" match the local time.
 
@@ -154,6 +160,7 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsig
 			   accurate date and time.
 			   ...
 			*/
+
 			gettimeofday(&timeofday, NULL);
 			rtt -= (double)(timeofday.tv_sec + timeofday.tv_usec*1e-6);
 
@@ -165,18 +172,22 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsig
 					/* Web server timestamps are without daylight saving */
 					tm.tm_isdst = 0;
 					timevalue.tv_sec = mktime(&tm);
+				} else {
+					printlog( 1, "%-25s unknown time format", host );
 				}
 
 				/* Print host, raw timestamp, round trip time */
 				if ( debug )
 					printf("%-25s %s (%.3f) => %li\n", host, remote_time, \
-					  -rtt, timevalue.tv_sec - timeofday.tv_sec - timezone );
+					  -rtt, timevalue.tv_sec - timeofday.tv_sec + gmtoffset );
 
 			} else {
-				printlog( 1, "%-25s response without timestamp", host );
+				printlog( 1, "%-25s no timestamp", host );
 			}
 
 		}						/* bytes received */
+
+		close( server_s );
 
 	} else 						/* connect  */
 		printlog( 1, "%-25s connection failed", host );
@@ -187,86 +198,99 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsig
 	/* Return the time delta between web server time (timevalue)
 	   and system time (timeofday)
 	*/
-	return( timevalue.tv_sec - timeofday.tv_sec - timezone );
+	return( timevalue.tv_sec - timeofday.tv_sec + gmtoffset );
 			
 }
 
-static int setclock( double timedelta, int setmode ) {
+
+static int setclock( double timedelta, char setmode ) {
 	struct timeval		timeofday;
 
-
-switch (setmode) {
-
+	switch (setmode)
+	{
 	case 0:						/* no time adjustment, just print time */
-		printlog( 0, "Time correction %.3f seconds", timedelta );
-		printlog( 0, "Use -a or -s to correct the time" );
+		printlog( 0, "Offset %.3f seconds", timedelta );
 		return(0);
 
-	case 1: case 3:				/* adjust time smoothly */
+	case 1:						/* adjust time smoothly */
 		timeofday.tv_sec  = (long)timedelta;	
-		timeofday.tv_usec = (long)((timedelta - (long)timedelta) * 1000000);	
+		timeofday.tv_usec = (long)((timedelta - timeofday.tv_sec) * 1000000);	
 
-		printlog( 0, "Adjusting time %.3f seconds", timedelta );
+		printlog( 0, "Adjusting %.3f seconds", timedelta );
 
 		return( adjtime(&timeofday, NULL) );
 
 	case 2:						/* set time */
+		printlog( 0, "Setting %.3f seconds", timedelta );
+
 		gettimeofday( &timeofday, NULL );
-
-		printlog( 0, "Setting time %.3f seconds", timedelta );
-
-		timedelta = ( timeofday.tv_sec + timeofday.tv_usec*1e-6 ) + timedelta;
+		timedelta += ( timeofday.tv_sec + timeofday.tv_usec*1e-6 );
 
 		timeofday.tv_sec  = (long)timedelta;	
-		timeofday.tv_usec = (long)((timedelta - (long)timedelta) * 1000000);	
+		timeofday.tv_usec = (long)((timedelta - timeofday.tv_sec) * 1000000);	
 
-		printlog( 0, "Set time to: %s", asctime(localtime(&timeofday.tv_sec)) );
+		printlog( 0, "Set: %s", asctime(localtime(&timeofday.tv_sec)) );
 
 		return( settimeofday(&timeofday, NULL) );
 
-	default:
-		printlog( 1, "Error setclock routine" );
-
-} /* switch setmode */
-
-		return(-1);
+	} /* switch setmode */
+	return(-1);
 }
 
 
 /* Display help page */
 static void showhelp() {
-
 	printf("htpdate version %s\n", version);
-	printf("Usage: htpdate [-adhqsxD] [-i pid file] [-m sec] [-M sec] [-t set threshold]\n");
-	printf("         [-P <proxyserver>[:port]] <host[:port]> [host[:port]]...\n\n");
+	printf("\
+Usage: htpdate [-0|-1] [-a|-q|-s] [-d|-D] [-h|-l] [-i pid file] [-m minpoll]\n\
+        [-M maxpoll] [-P <proxyserver>[:port]] <host[:port]> ...\n\n\
+  -0    HTTP/1.0 request (default)\n\
+  -1    HTTP/1.1 request\n\
+  -a    adjust time smoothly\n\
+  -q    query only, don't make time changes (default)\n\
+  -s    set time\n\
+  -d    debug mode\n\
+  -D    daemon mode\n\
+  -h    help\n\
+  -l    use syslog for output\n\
+  -i    pid file\n\
+  -m    minimum poll interval (2^m)\n\
+  -M    maximum poll interval (2^M)\n\
+  -P    proxy server\n\
+  host  web server hostname or ip address\n\
+  port  port number (default 80 and 8080 for proxy server)\n\n");
 
 	return;
-
 }
 
 
+
 int main( int argc, char *argv[] ) {
-	pid_t				pid;
-	char				*host = NULL, *proxy = NULL, *portstr = NULL;
-	long				timedelta[16], timestamp;
-	double				timeavg, threshold = 5;
-	int 				numservers;
-	int 				i, validtime, goodtime;
+	char				*host = NULL, *proxy = NULL, *portstr;
+	int					timedelta[16], timestamp;
 	int					port, proxyport = 8080;
-	unsigned long		nap = 0, when = 500000;
+	int					sumtime, numservers, validtime, goodtime, mean, i;
+	double				timeavg;
+	unsigned int		nap = 0, when = 500000;
 	unsigned int		minsleep = 10, maxsleep = 18, sleeptime = minsleep;
-	int					setmode = 0, param;
+	char				setmode = 0, httpversion = 0, try, param;
 	char				*pidfile = "/var/run/htpdate.pid";
 	FILE				*pid_file;
+	pid_t				pid;
 
-	extern char *optarg;
-	extern int optind;
+	extern char			*optarg;
+	extern int			optind;
 
 
 	/* Parse the command line switches and arguments */
-	while ( (param = getopt(argc, argv, "adhi:m:p:qst:xDM:P:") ) != -1)
+	while ( (param = getopt(argc, argv, "01adhi:lm:qsDM:P:") ) != -1)
 	switch (param)
 	{
+		case '0':			/* adjust time */
+			break;
+		case '1':			/* adjust time */
+			httpversion = 1;
+			break;
 		case 'a':			/* adjust time */
 			setmode = 1;
 			break;
@@ -279,6 +303,9 @@ int main( int argc, char *argv[] ) {
 		case 'i':			/* pid file help */
 			pidfile = (char *)optarg;
 			break;
+		case 'l':			/* pid file help */
+			logmode = 1;
+			break;
 		case 'm':			/* minimum poll interval */
 			if ( ( minsleep = atoi(optarg) ) <= 0 ) {
 				printlog( 1, "Invalid sleep time" );
@@ -287,23 +314,13 @@ int main( int argc, char *argv[] ) {
 			sleeptime = minsleep;
 			break;
 		case 'q':			/* query only */
-			setmode = 0;
 			break;
 		case 's':			/* set time */
 			setmode = 2;
 			break;
-		case 't':			/* step threshold value in seconds */
-			if ( ( threshold = atof(optarg) ) <= 0 ) {
-				printlog( 1, "Invalid threshold" );
-				exit(1);
-			}
-			break;
-		case 'x':			/* never set time, only slew */
-			setmode = 3;
-			break;
 		case 'D':			/* run as daemon */
-			setmode = 1;
 			daemonize = 1;
+			logmode = 1;
 			break;
 		case 'M':			/* maximum poll interval */
 			if ( (maxsleep = atoi(optarg) ) <= 0 ) {
@@ -335,40 +352,66 @@ int main( int argc, char *argv[] ) {
 		exit(1);
 	}
 
+    /* Calculate GMT offset from local timezone */
+    time(&gmtoffset);
+    gmtoffset -= mktime(gmtime(&gmtoffset));
+
+	/* Debug overrules daemon mode */
+	if ( debug == 1 )
+		daemonize = 0;
+
 	/* Run as a daemonize when -D is set and -d isn't */
-	if ( daemonize && (!debug) ) {
+	if ( daemonize ) {
 
 		/* Check if htpdate is already running (pid exists)*/
 		pid_file=fopen(pidfile, "r");
 		if (pid_file) {
-			printlog( 1, "htpdate is already running" );
+			printlog( 1, "htpdate already running" );
 			exit(1);
 		}
 
-		switch ( (pid=fork()) ) {
-		case -1:
-			perror ("fork()");
-			exit(3);
-		case 0:
-			close(STDIN_FILENO);
-			close(STDOUT_FILENO);
-			close(STDERR_FILENO);
-			if (setsid () == -1) {
-				exit(4);
-			}
-			break;
-		default:
+		pid=fork();
+		if ( pid < 0 ) {
+			printlog ( 1, "error forkiing" );
+			exit(1);
+		}
+
+		if ( pid > 0 ) {
 			/* Write a pid file */
 			pid_file=fopen(pidfile, "w");
 			if ( !pid_file )
-				fprintf( stderr,"Cannot create pid file\n" );
+				printlog( 1, "Error creating pid file" );
 			else {
 				fprintf( pid_file,"%u\n", (unsigned short)pid );
 				fclose( pid_file );
 			}
 			printlog( 0, "htpdate version %s started", version);
-			return(0);
+
+			exit(0);
 		}
+
+		/* Change the file mode mask */
+		umask(0);
+
+		/* Create a new SID for the child process */
+		if ( setsid () < 0 ) {
+			exit(1);
+		}
+
+		/* Change the current working directory */
+		if ((chdir("/")) < 0) {
+			printlog( 1, "Error cd /" );
+			exit(1);
+		}
+
+		/* Close out the standard file descriptors */
+		close(STDIN_FILENO);
+		close(STDOUT_FILENO);
+		close(STDERR_FILENO);
+
+		/* Query mode doesn't exist in daemon mode */
+		if ( setmode == 0 )
+			setmode = 1;
 
 	}
 
@@ -377,22 +420,20 @@ int main( int argc, char *argv[] ) {
 	*/
 	numservers = argc - optind;
 	if ( numservers > 1 )
-		when = nap = (unsigned long)(1000000 / (argc - optind + 1));
+		when = nap = (unsigned long)(1000000 / (numservers + 1));
 
 
 	/* Infinite poll cycle loop in daemonize mode,
 	   out break out of the loop if daemonize != 1
 	*/
-	while ( 1 ) {
+	do {
 
 	/* Initialize number of received valid timestamps, good timestamps
 	   and the average of the good timestamps
 	*/
-	validtime = 0;
-	goodtime = 0;
-	timeavg = 0;
+	validtime = goodtime = sumtime = 0;
 
-	/* Loop through the time sources => web servers */
+	/* Loop through the time sources (web servers); poll cycle */
 	for ( i = optind; i < argc; i++ ) {
 
 		/* host:port is stored in argv[i] */
@@ -402,23 +443,29 @@ int main( int argc, char *argv[] ) {
 			portstr[0] = '\0';
 			portstr++;
 			if ( (port = atoi(portstr)) <= 0 ) {
-				fprintf( stderr, "Invalid port number\n");
+				printlog( 1, "Invalid port number");
 				exit(1);
 			}
 		} else {
 			port = 80;
 		}
 
-		timestamp = getHTTPdate( host, port, proxy, proxyport, when );
+		/* Retry if first poll shows timeoffset */
+		try = 2;
+		do {
+			timestamp = getHTTPdate( host, port, proxy, proxyport,\
+					httpversion, when );
+			try--;
+		} while ( timestamp && try && daemonize );
 
 		/* Only include valid responses in timedelta[], |delta time| < year */
-		if ( labs(timestamp) < 31536000 ) {
+		if ( ( timestamp > -YEAR ) && ( timestamp < YEAR ) ) {
 			timedelta[validtime] = timestamp;
 			validtime++;
 		}
 
-		/* Sleep for a while, unless we detect a time offset */
-		if ( daemonize && (timestamp == 0) )
+		/* Sleep for a while, unless we detected a time offset */
+		if ( daemonize && !timestamp )
 			sleep( (1 << sleeptime) / numservers );
 
 		/* Take a nap, to spread polls equally within a second.
@@ -429,71 +476,67 @@ int main( int argc, char *argv[] ) {
 		   ...
 		   nap = 1000000 / (#servers + 1)
 		*/
-
 		when += nap;
 	}
 
 	/* Sort the timedelta results */
 	qsort( &timedelta, validtime, sizeof(timedelta[0]), longcomp );
 
-	/* Filter out the bogus timevalues:
-	   - every timevalue which is more than 1 seconde off from mean
-	   is considered a 'false ticker'. Ntp sync web server can never
-	   be more off than a second, between two polls.
+	/* Mean time value */
+	mean = timedelta[validtime/2];
+
+	/* Filter out the bogus timevalues. A timedelta which is more than
+	   1 seconde off from mean is considered a 'false ticker'.
+	   NTP synced web servers can never be more off than a second.
 	*/
 	for ( i = 0; i < validtime; i++ ) {
-		if ( labs(timedelta[i]-timedelta[validtime/2]) <= 1 ) {
-			timeavg += timedelta[i];
+		if ( (timedelta[i]-mean <= 1) && (timedelta[i]-mean >= -1) ) {
+			sumtime += timedelta[i];
 			goodtime++;
 		}
 	}
 
 	/* Check if we have at least one valid response */
-	if ( goodtime > 0 ) {
-		timeavg /= (double)goodtime;
+	if ( goodtime ) {
+
+		timeavg = sumtime/(double)goodtime;
 
 		if ( debug ) {
-			printf("#: %d, mean: %li, average: %.3f\n", goodtime, \
-					timedelta[validtime/2], timeavg);
+			printf("#: %d, mean: %d, average: %.3f\n", goodtime, \
+					mean, timeavg );
 			printf("Timezone: %s %s\n", tzname[0], tzname[1] );
 		}
 
-		/* If the time offset is bigger than the threshold,
-		   use set not adjust, unless -x was set
-		*/
-		if ( daemonize ) {
-			if ( (fabs(timeavg) > threshold) && (setmode != 3) ) {
-				setmode = 2;			/* set time */
-				sleeptime = minsleep;	/* fallback to minimum sleeptime */
-			} else
-				setmode = 1;			/* adjust time */
+		/* Do I really need to change the time?  */
+		if ( sumtime ) {
+			if ( setclock( timeavg, setmode ) ) {
+				printlog( 1, "Error changing time" );
+			};
+			/* Decrease polling interval */
+			if ( sleeptime > minsleep ) sleeptime--;
+			/* ADJ is the time needed, with adjtime, to correct
+			   1 second time offset. */
+			if ( daemonize ) {
+				if (timeavg < 0 ) timeavg = -timeavg;
+				sleep( timeavg * ADJ );
+			}
+		} else {
+			/* Increase polling interval */
+			if ( sleeptime < maxsleep ) sleeptime++;
 		}
 
-			
-		/* Do I really need to change the time?  */
-		if ( (timeavg != 0) || (!daemonize) )
-			setclock( timeavg, setmode );
-
 	} else {
-		printlog( 1, "No suitable server found for time synchronization");
+		printlog( 1, "No server suitable for synchronization found" );
 	}
 
-	/* Was the -D daemonize switch set? Break the while loop if it wasn't */
-	if ( (!daemonize) || debug )
-		break;
+	/* Do not step through time, only adjust in daemon mode */
+	setmode = 1;
 
+	} while ( daemonize );		/* end of infinite while loop */
 
-	/* Calculate new sleep time, depending on offset */
-	if ( timeavg != 0 ) {
-		sleeptime--;
-		if ( sleeptime < minsleep ) sleeptime = minsleep;
-		sleep( 1 << sleeptime );
-	} else {
-		sleeptime++;
-		if ( sleeptime > maxsleep ) sleeptime = maxsleep;
-	}	
-
-	} /* end of infinite while loop */
+	if ( !sumtime ) {
+		setclock( 0, 0);
+	}
 
 	exit(0);
 

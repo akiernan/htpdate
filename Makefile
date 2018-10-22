@@ -2,8 +2,10 @@ prefix = /usr/local
 bindir = ${exec_prefix}/bin
 mandir = ${prefix}/man
 
+#CC = tcc
+#CC = icc
 CC = gcc
-CFLAGS = -Wall -Os
+CFLAGS = -Wall -ansi -Os
 
 INSTALL = /usr/bin/install -c
 

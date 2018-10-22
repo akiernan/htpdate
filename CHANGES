@@ -1,9 +1,25 @@
-Changes in 0.7.2
+Changes in 0.8.0
 ----------------
+
+- Lots of code clean up, eg.:
+	- compiles with the -ansi switch (for better portability, but only tested
+      on Linux and FreeBSD)
+    - Compiles with Tiny C Compiler (tcc) and Intel C compiler (icc)
+	- Restored compatibility with FreeBSD (timezone calculation).
+- A second poll is made if a time offset has been detected.
+- Removed the switches "-t" and "-x". In daemon mode htpdate will only adjust
+  time. With the "-s" switch htpdate will set the time once at startup and
+  after that only smooth adjusts are made.
+- Added "-l" switch, which enables logging to syslog in non-daemon mode.
+  Convinient if htpdate is used from cron.
+- Added "-0" to make an HTTP/1.0 request and "-1" for HTTP/1.1
+
+
+0.7.2
+-----
 
 - Minor bug fix. When running in daemon mode TCP connections weren't cleaned up
   properly (sockets remained in CLOSE_WAIT status).
-  (Mostly HTTP/1.0 is to blame for strange/wrong behaviour of "close")
 
 
 0.7.1
