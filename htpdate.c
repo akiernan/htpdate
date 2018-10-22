@@ -1,12 +1,11 @@
 /*
-	htpdate v1.0.0
+	htpdate v1.0.1
 
 	Eddy Vervest <eddy@cleVervest.com>
 	http://www.clevervest.com/htp
 
 	Synchronize local workstation with time offered by remote web servers
 
-	Extract date/time stamp from web server response
 	This program works with the timestamps return by web servers,
 	formatted as specified by HTTP/1.1 (RFC 2616, RFC 1123).
 
@@ -21,7 +20,7 @@
 
 	~# htpdate -a www.linux.org www.freebsd.org
 
-	...see man page for more parameters
+	...see man page for more details
 
 
 	This program is free software; you can redistribute it and/or
@@ -53,7 +52,7 @@
 #include <pwd.h>
 #include <grp.h>
 
-#define VERSION 				"1.0.0"
+#define VERSION 				"1.0.1"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -65,15 +64,15 @@
 #define	MAX_DRIFT				32768000		/* 500 PPM */
 #define	MAX_ATTEMPT				2				/* Poll attempts */
 #define	DEFAULT_PID_FILE		"/var/run/htpdate.pid"
+#define	URLSIZE					128
 #define	BUFFERSIZE				1024
 
 #define sign(x) (x < 0 ? (-1) : 1)
 
 
-/* By default we turn off "debug", "log" and "daemonize" mode  */
+/* By default we turn off "debug" and "log" mode  */
 static int		debug = 0;
 static int		logmode = 0;
-static int		daemonize = 0;
 static time_t	gmtoffset;
 
 
@@ -129,10 +128,10 @@ static void splithostport( char **host, char **port ) {
 /* Printlog is a slighty modified version from the one used in rdate */
 static void printlog( int is_error, char *format, ... ) {
 	va_list args;
-	int n;
 	char buf[128];
+
 	va_start(args, format);
-	n = vsnprintf(buf, sizeof(buf), format, args);
+	(void) vsnprintf(buf, sizeof(buf), format, args);
 	va_end(args);
 
     if ( logmode )
@@ -148,11 +147,12 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	struct addrinfo		hints, *res, *res0;
 	struct tm			tm;
 	struct timeval		timevalue = {LONG_MAX, 0};
-	struct timeval		timeofday = {0, 0};
+	struct timeval		timeofday;
+	struct timespec		sleepspec, remainder;
 	long				rtt;
 	char				buffer[BUFFERSIZE];
 	char				remote_time[25] = {};
-	char				url[128] = {};
+	char				url[URLSIZE] = {};
 	char				*pdate = NULL;
 
 
@@ -174,7 +174,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	if ( proxy == NULL ) {
 		rc = getaddrinfo( host, port, &hints, &res0 );
 	} else {
-		sprintf( url, "http://%s:%s", host, port);
+		snprintf( url, URLSIZE, "http://%s:%s", host, port);
 		rc = getaddrinfo( proxy, proxyport, &hints, &res0 );
 	}
 
@@ -190,7 +190,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	   Connection: close, allows the server the immediately close the
 	   connection after sending the response.
 	*/
-	sprintf(buffer, "HEAD %s/ HTTP/1.%s\r\nHost: %s\r\nUser-Agent: htpdate/"VERSION"\r\nPragma: no-cache\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n", url, httpversion, host);
+	snprintf(buffer, BUFFERSIZE, "HEAD %s/ HTTP/1.%s\r\nHost: %s\r\nUser-Agent: htpdate/"VERSION"\r\nPragma: no-cache\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n", url, httpversion, host);
 
 	/* Loop through the available canonical names */
 	res = res0;
@@ -215,18 +215,21 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 		return(0);				/* Assume correct time */
 	}
 
-	/* Wait till we reach the desired time, "when" */
+	/* Initialize timer */
 	gettimeofday(&timeofday, NULL);
 
 	/* Initialize RTT (start of measurement) */
 	rtt = timeofday.tv_sec;
 
+	/* Wait till we reach the desired time, "when" */
+	sleepspec.tv_sec = 0;
 	if ( when >= timeofday.tv_usec ) {
-		usleep( when - timeofday.tv_usec );
+		sleepspec.tv_nsec = ( when - timeofday.tv_usec ) * 1000;
 	} else {
-		usleep( 1000000 + when - timeofday.tv_usec );
+		sleepspec.tv_nsec = ( 1000000 + when - timeofday.tv_usec ) * 1000;
 		rtt++;
 	}
+	nanosleep( &sleepspec, &remainder );
 
 	/* Send HEAD request */
 	if ( send(server_s, buffer, strlen(buffer), 0) < 0 )
@@ -367,13 +370,14 @@ static int htpdate_adjtimex( double drift ) {
 
 static void showhelp() {
 	puts("htpdate version "VERSION"\n\
-Usage: htpdate [-046adhlqstxD] [-i pid file] [-m minpoll] [-M maxpoll]\n\
+Usage: htpdate [-046abdhlqstxD] [-i pid file] [-m minpoll] [-M maxpoll]\n\
          [-p precision] [-P <proxyserver>[:port]] [-u user[:group]]\n\
          <host[:port]> ...\n\n\
   -0    HTTP/1.0 request\n\
   -4    Force IPv4 name resolution only\n\
   -6    Force IPv6 name resolution only\n\
   -a    adjust time smoothly\n\
+  -b    burst mode\n\
   -d    debug mode\n\
   -D    daemon mode\n\
   -h    help\n\
@@ -465,12 +469,13 @@ int main( int argc, char *argv[] ) {
 	char				*httpversion = DEFAULT_HTTP_VERSION;
 	char				*pidfile = DEFAULT_PID_FILE;
 	char				*user = NULL, *userstr = NULL, *group = NULL;
-	double				timeavg = 0, drift = 0;
+	double				timeavg, drift = 0;
 	int					timedelta[MAX_HTTP_HOSTS], timestamp;
 	int                 sumtimes, numservers, validtimes, goodtimes, mean;
 	int					nap = 0, when = 500000, precision = 0;
-	int					setmode = 0, try, offsetdetect;
-	int					i, param;
+	int					setmode = 0, burstmode = 0, try, offsetdetect;
+	int					i, burst, param;
+	int					daemonize = 0;
 	int					ipversion = DEFAULT_IP_VERSION;
 	int					timelimit = DEFAULT_TIME_LIMIT;
 	int					minsleep = DEFAULT_MIN_SLEEP;
@@ -487,7 +492,7 @@ int main( int argc, char *argv[] ) {
 
 
 	/* Parse the command line switches and arguments */
-	while ( (param = getopt(argc, argv, "046adhi:lm:p:qstu:xDM:P:") ) != -1)
+	while ( (param = getopt(argc, argv, "046abdhi:lm:p:qstu:xDM:P:") ) != -1)
 	switch( param ) {
 
 		case '0':			/* HTTP/1.0 */
@@ -502,16 +507,19 @@ int main( int argc, char *argv[] ) {
 		case 'a':			/* adjust time */
 			setmode = 1;
 			break;
+		case 'b':			/* burst mode */
+			burstmode = 1;
+			break;
 		case 'd':			/* turn debug on */
 			debug = 1;
 			break;
 		case 'h':			/* show help */
 			showhelp();
 			exit(0);
-		case 'i':			/* pid file help */
+		case 'i':			/* pid file */
 			pidfile = (char *)optarg;
 			break;
-		case 'l':			/* pid file help */
+		case 'l':			/* log mode */
 			logmode = 1;
 			break;
 		case 'm':			/* minimum poll interval */
@@ -652,39 +660,55 @@ int main( int argc, char *argv[] ) {
 		port = DEFAULT_HTTP_PORT;
 		splithostport( &host, &port );
 
-		/* Retry if first poll shows time offset */
-		try = MAX_ATTEMPT;
-		do {
-			timestamp = getHTTPdate( host, port, proxy, proxyport,\
-					httpversion, ipversion, when );
-			try--;
-		} while ( timestamp && try );
-
-		/* Only include valid responses in timedelta[] */
-		if ( timestamp < timelimit && timestamp > -timelimit ) {
-			timedelta[validtimes] = timestamp;
-			validtimes++;
+		/* if burst mode, reset "when" */
+		if ( burstmode ) {
+			if ( precision )
+				when = precision;
+			else
+				when = nap;
 		}
 
-		/* If we detected a time offset, set the flag */
-		if ( timestamp )
-			offsetdetect = 1;
+		burst = 0;
+		do {
+			/* Retry if first poll shows time offset */
+			try = MAX_ATTEMPT;
+			do {
+				if ( debug ) printlog( 0, "burst: %d try: %d when: %d", \
+					burst + 1, MAX_ATTEMPT - try + 1, when );
+				timestamp = getHTTPdate( host, port, proxy, proxyport,\
+						httpversion, ipversion, when );
+				try--;
+			} while ( timestamp && try );
+
+			/* Only include valid responses in timedelta[] */
+			if ( timestamp < timelimit && timestamp > -timelimit ) {
+				timedelta[validtimes] = timestamp;
+				validtimes++;
+			}
+
+			/* If we detected a time offset, set the flag */
+			if ( timestamp )
+				offsetdetect = 1;
+
+			/* Take a nap, to spread polls equally within a second.
+			   Example:
+			   2 servers => 0.333, 0.666
+			   3 servers => 0.250, 0.500, 0.750
+			   4 servers => 0.200, 0.400, 0.600, 0.800
+			   ...
+			   nap = 1000000 / (#servers + 1)
+
+			   or when "precision" is specified, a different algorithm is used
+			*/
+			when += nap;
+
+			burst++;
+		} while ( burst < (argc - optind) * burstmode );
 
 		/* Sleep for a while, unless we detected a time offset */
 		if ( daemonize && !offsetdetect )
 			sleep( sleeptime / numservers );
 
-		/* Take a nap, to spread polls equally within a second.
-		   Example:
-		   2 servers => 0.333, 0.666
-		   3 servers => 0.250, 0.500, 0.750
-		   4 servers => 0.200, 0.400, 0.600, 0.800
-		   ...
-		   nap = 1000000 / (#servers + 1)
-
-		   or when "precision" is specified, a different algorithm is used
-		*/
-		when += nap;
 	}
 
 	/* Sort the timedelta results */
@@ -710,7 +734,7 @@ int main( int argc, char *argv[] ) {
 		timeavg = sumtimes/(double)goodtimes;
 
 		if ( debug ) {
-			printlog( 0, "#: %d, mean: %d, average: %.3f", goodtimes, \
+			printlog( 0, "#: %d mean: %d average: %.3f", goodtimes, \
 					mean, timeavg );
 			printlog( 0, "Timezone: GMT%+li (%s,%s)", gmtoffset/3600, tzname[0], tzname[1] );
 		}
@@ -754,7 +778,7 @@ int main( int argc, char *argv[] ) {
 				/* Decrease polling interval to minimum */
 				sleeptime = minsleep;
 
-				/* Sleep for 20 minutes, after a time adjust or set */
+				/* Sleep for 30 minutes after a time adjust or set */
 				sleep( DEFAULT_MIN_SLEEP );
 			}
 		} else {

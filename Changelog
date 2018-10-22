@@ -1,5 +1,15 @@
-Changes in 1.0.0
+Changes in 1.0.1
 ----------------
+
+- Added "burst mode" (-b) to enhance accuracy.
+- Extended debug output
+- Removed potential buffer overflows vulnerabilities.
+- Replaced usleep by nanosleep (which is more portable).
+- Included debian support.
+
+
+1.0.0
+-----
 
 - Cleanup/simplified the code.
 - Again a more robust implementation of the "-p" (precision) switch.
