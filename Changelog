@@ -1,5 +1,11 @@
-Changes in 1.0.6
+Changes in 1.0.7
 ----------------
+
+- Fixed a part of the incorrect bug fix in 1.0.6.
+
+
+1.0.6
+-----
 
 - Bug fix for https://bugs.gentoo.org/show_bug.cgi?id=350685
 (Thanks Diego Augusto Molina for the bug report and Pavel Kazakov for

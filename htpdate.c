@@ -1,5 +1,5 @@
 /*
-	htpdate v1.0.6
+	htpdate v1.0.7
 
 	Eddy Vervest <eddy@vervest.org>
 	http://www.vervest.org/htp
@@ -52,7 +52,7 @@
 #include <pwd.h>
 #include <grp.h>
 
-#define VERSION 				"1.0.6"
+#define VERSION 				"1.0.7"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -181,7 +181,6 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	/* Was the hostname and service resolvable? */
 	if ( rc ) {
 		printlog( 1, "%s host or service unavailable", host );
-		freeaddrinfo(res0);
 		return(0);				/* Assume correct time */
 	}
 
