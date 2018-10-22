@@ -1,5 +1,13 @@
-Changes in 0.7.1
+Changes in 0.7.2
 ----------------
+
+- Minor bug fix. When running in daemon mode TCP connections weren't cleaned up
+  properly (sockets remained in CLOSE_WAIT status).
+  (Mostly HTTP/1.0 is to blame for strange/wrong behaviour of "close")
+
+
+0.7.1
+-----
 
 - Bug fix. Poll cycle could become very very short (seconds...) in some
   cases.

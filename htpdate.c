@@ -1,5 +1,5 @@
 /*
-	htpdate v0.7.1
+	htpdate v0.7.2
 
 	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
@@ -48,7 +48,7 @@
 #include <math.h>
 #include <limits.h>
 
-#define version 		"0.7.1"
+#define version 		"0.7.2"
 #define	BUFFER			2048
 
 
@@ -101,10 +101,10 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsig
 	   web server to return a fresh timestamp
 	*/
 	if ( proxy == NULL ) {
-		sprintf(out_buf, "HEAD / HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\n\r\n", version);
+		sprintf(out_buf, "HEAD / HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\nConnection: Keep-Alive\r\n\r\n", version);
 		hostinfo = gethostbyname( host );
 	} else {
-		sprintf(out_buf, "HEAD http://%s:%i HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\n\r\n", host, port, version);
+		sprintf(out_buf, "HEAD http://%s:%i HTTP/1.0\r\nUser-Agent: htpdate/%s\r\nPragma: no-cache\r\nConnection: Keep-Alive\r\n\r\n", host, port, version);
 		hostinfo = gethostbyname( proxy );
 		port = proxyport;
 	}
@@ -139,6 +139,9 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsig
 		   The return code from recv() is the number of bytes received
 		*/
 		if ( recv(server_s, in_buf, BUFFER, 0) != -1 ) {
+
+			/* Close the "persistent" connection */
+			close( server_s );
 
 			/* Assuming that network delay (server->htpdate) is neglectable,
 			   the received web server time "should" match the local time.
