@@ -1,5 +1,12 @@
-Changes in 0.9.0
+Changes in 0.9.1
 ----------------
+
+- Htpdate can drop root privileges and run as a restricted user.
+- Drift calculation starts now after first time correction.
+
+
+0.9.0
+-----
 
 - Mostly code cleanup
 - Changed "char" variables into "int", which should be more efficient

@@ -34,4 +34,4 @@ FREQ=`echo "$FREQTOT % 6553600" | bc | awk -F. '{print $1}'`
 
 echo "TICK=$TICK"
 echo "FREQ=$FREQ"
-echo "Suggested command: adjtime -tick $TICK -frequency $FREQ"
+echo "Suggested command: adjtimex -tick $TICK -frequency $FREQ"

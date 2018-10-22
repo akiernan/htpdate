@@ -1,6 +1,6 @@
 Summary: HTTP based time synchronization tool
 Name: htpdate
-Version: 0.9.0
+Version: 0.9.1
 Release: 1
 License: GPL
 Group: System Environment/Daemons
@@ -38,12 +38,15 @@ mkdir -p %{buildroot}/%{_initrddir}
 
 install -m0755 htpdate %{buildroot}%{_bindir}/htpdate
 install -m0644 htpdate.8.gz %{buildroot}%{_mandir}/htpdate.8.gz
-install -m0755 htpdate.init %{buildroot}%{_initrddir}/htpdate
+install -m0755 scripts/htpdate.init %{buildroot}%{_initrddir}/htpdate
 
 %post
+%{_initrddir}/htpdate stop
 /sbin/chkconfig --add htpdate
+%{_initrddir}/htpdate start
 
 %preun
+%{_initrddir}/htpdate stop
 /sbin/chkconfig --del htpdate
 
 %clean

@@ -1,5 +1,5 @@
 /*
-	htpdate v0.9.0
+	htpdate v0.9.1
 
 	Eddy Vervest <eddy@cleVervest.com>
 	http://www.clevervest.com/htp
@@ -40,6 +40,7 @@
 #include <signal.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -48,8 +49,10 @@
 #include <syslog.h>
 #include <stdarg.h>
 #include <limits.h>
+#include <pwd.h>
+#include <grp.h>
 
-#define VERSION 				"0.9.0"
+#define VERSION 				"0.9.1"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -304,7 +307,6 @@ static int setclock( double timedelta, int setmode ) {
 		return(0);
 	}
 
-
 	switch ( setmode ) {
 
 	case 0:						/* no time adjustment, just print time */
@@ -317,6 +319,8 @@ static int setclock( double timedelta, int setmode ) {
 
 		printlog( 0, "Adjusting %.3f seconds", timedelta );
 
+		/* become root */
+		seteuid(0);
 		return( adjtime(&timeofday, NULL) );
 
 	case 2:						/* set time */
@@ -330,6 +334,8 @@ static int setclock( double timedelta, int setmode ) {
 
 		printlog( 0, "Set: %s", asctime(localtime(&timeofday.tv_sec)) );
 
+		/* become root */
+		seteuid(0);
 		return( settimeofday(&timeofday, NULL) );
 
 	default:
@@ -344,7 +350,8 @@ static int setclock( double timedelta, int setmode ) {
 static void showhelp() {
 	printf("htpdate version %s\n\
 Usage: htpdate [-046adhlqstD] [-i pid file] [-m minpoll] [-M maxpoll]\n\
-         [-p precision] [-P <proxyserver>[:port]] <host[:port]> ...\n\n\
+         [-p precision] [-P <proxyserver>[:port]] [-u user[:group]]\n\
+         <host[:port]> ...\n\n\
   -0    HTTP/1.0 request\n\
   -4    Force IPv4 name resolution only\n\
   -6    Force IPv6 name resolution only\n\
@@ -361,6 +368,7 @@ Usage: htpdate [-046adhlqstD] [-i pid file] [-m minpoll] [-M maxpoll]\n\
   -q    query only, don't make time changes (default)\n\
   -s    set time\n\
   -t    turn off sanity time check\n\
+  -u    run daemon as user\n\
   host  web server hostname or ip address (maximum of 16)\n\
   port  port number (default 80 and 8080 for proxy server)\n\n", VERSION);
 
@@ -411,7 +419,7 @@ static void runasdaemon( char *pidfile ) {
 	/* Second fork, to become the grandchild */
 	pid = fork();
 	if ( pid < 0 ) {
-		fprintf( stderr, "fork()" );
+		printlog( 1, "fork()" );
 		exit(1);
 	}
 
@@ -419,7 +427,7 @@ static void runasdaemon( char *pidfile ) {
 		/* Write a pid file */
 		pid_file = fopen( pidfile, "w" );
 		if ( !pid_file ) {
-			fprintf( stderr, "Error writing pid file" );
+			printlog( 1, "Error writing pid file" );
 			exit(1);
 		} else {
 			fprintf( pid_file, "%u\n", (unsigned short)pid );
@@ -437,6 +445,7 @@ int main( int argc, char *argv[] ) {
 	char				*port, *proxyport;
 	char				*httpversion = DEFAULT_HTTP_VERSION;
 	char				*pidfile = DEFAULT_PID_FILE;
+	char				*user = NULL, *userstr = NULL, *group = NULL;
 	double				timeavg = 0, sumdelta = 0, drift;
 	int					timedelta[MAX_HTTP_HOSTS], timestamp;
 	int                 sumtimes, numservers, validtimes, goodtimes, mean;
@@ -448,14 +457,18 @@ int main( int argc, char *argv[] ) {
 	int					minsleep = DEFAULT_MIN_SLEEP;
 	int					maxsleep = DEFAULT_MAX_SLEEP;
 	int					sleeptime = minsleep;
-	time_t				starttime;
+	int					sw_uid = 0, sw_gid = 0;
+	time_t				starttime = 0;
+
+	struct passwd		*pw;
+	struct group		*gr;
 
 	extern char			*optarg;
 	extern int			optind;
 
 
 	/* Parse the command line switches and arguments */
-	while ( (param = getopt(argc, argv, "046adhi:lm:p:qstDM:P:") ) != -1)
+	while ( (param = getopt(argc, argv, "046adhi:lm:p:qstu:DM:P:") ) != -1)
 	switch( param ) {
 
 		case '0':			/* HTTP/1.0 */
@@ -507,6 +520,29 @@ int main( int argc, char *argv[] ) {
 		case 't':			/* disable "sanity" time check */
 			timelimit = 2100000000;
 			break;
+		case 'u':			/* drop root privileges and run as user */
+			user = (char *)optarg;
+			userstr = strchr( user, ':' );
+			if ( userstr != NULL ) {
+				userstr[0] = '\0';
+				group = userstr + 1;
+			}
+			if ( (pw = getpwnam(user)) != NULL ) {
+				sw_uid = pw->pw_uid;
+				sw_gid = pw->pw_gid;
+			} else {
+				printf( "Unknown user %s\n", user );
+				exit(1);
+			}
+			if ( group != NULL ) {
+				if ( (gr = getgrnam(group)) != NULL ) {
+					sw_gid = gr->gr_gid;
+				} else {
+					printf( "Unknown group %s\n", group );
+					exit(1);
+				}
+			}
+			break;
 		case 'D':			/* run as daemon */
 			daemonize = 1;
 			logmode = 1;
@@ -541,11 +577,11 @@ int main( int argc, char *argv[] ) {
 		exit(1);
 	}
 
-    /* Calculate GMT offset from local timezone */
-    time(&gmtoffset);
-	/* "-1" needed to avoid division by zero in drift calculation */
-	starttime = gmtoffset - 1;
-    gmtoffset -= mktime(gmtime(&gmtoffset));
+	/* One must be "root" to change the system time */
+	if ( (getuid() != 0) && (setmode || daemonize) ) {
+		fprintf( stderr, "Only root can change time\n" );
+		exit(1);
+	}
 
 	/* Run as a daemonize when -D is set */
 	if ( daemonize ) {
@@ -556,6 +592,14 @@ int main( int argc, char *argv[] ) {
 	} else {
 		precision = 0;
 	}
+
+	/* Now we are root, we drop the privileges (if specified) */
+	if ( sw_uid ) seteuid( sw_uid );
+	if ( sw_gid ) setegid( sw_gid );
+
+    /* Calculate GMT offset from local timezone */
+    time(&gmtoffset);
+    gmtoffset -= mktime(gmtime(&gmtoffset));
 
 	/* In case we have more than one web server defined, we
 	   spread the polls equal within a second and take a "nap" in between.
@@ -674,12 +718,20 @@ int main( int argc, char *argv[] ) {
 			if ( setclock( timeavg, setmode ) )
 				printlog( 1, "Time change failed" );
 
+			/* Drop root privileges again */
+			if ( sw_uid ) seteuid( sw_uid );
+			if ( sw_gid ) setegid( sw_gid );
+
 			if ( daemonize ) {
-				/* Calculate systematic clock drift */
-				sumdelta += timeavg;
-				drift = sumdelta * 86400 / (time(NULL) - starttime);
-				printlog( 0, "Drift %.2f PPM, %.2f sec/day", \
-								drift / 0.0864, drift );
+				if ( starttime ) {
+					/* Calculate systematic clock drift */
+					sumdelta += timeavg;
+					drift = sumdelta * 86400 / (time(NULL) - starttime);
+					printlog( 0, "Drift %.2f PPM, %.2f sec/day", \
+							drift / 0.0864, drift );
+				} else {
+					starttime = time(NULL);
+				}
 
 				/* Decrease polling interval */
 				if ( sleeptime > minsleep )

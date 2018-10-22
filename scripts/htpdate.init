@@ -13,10 +13,7 @@ case "$1" in
 		echo "Starting HTTP Time Protocol daemon: htpdate"
 		# Set the time first before daemonizing, because the time offset
 		# might be too big for smooth time adjustment
-		/usr/bin/htpdate -s $SERVERS
-		/usr/bin/htpdate -D -i $PIDFILE $SERVERS
-		# or the above two lines combined in one
-		# /usr/bin/htpdate -D -s -i $PIDFILE $SERVERS
+		/usr/bin/htpdate -D -s -i $PIDFILE $SERVERS
 		;;
 	stop)
 		echo "Stopping HTTP Time Protocol daemon: htpdate"
