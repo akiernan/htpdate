@@ -1,5 +1,5 @@
 /*
-	htpdate v1.1.2
+	htpdate v1.1.3
 
 	Eddy Vervest <eddy@vervest.org>
 	http://www.vervest.org/htp
@@ -52,7 +52,7 @@
 #include <pwd.h>
 #include <grp.h>
 
-#define VERSION 				"1.1.2"
+#define VERSION 				"1.1.3"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -73,7 +73,7 @@
 /* By default we turn off "debug" and "log" mode  */
 static int		debug = 0;
 static int		logmode = 0;
-static time_t	gmtoffset;
+static time_t	gmtoffset = 0;
 
 
 /* Insertion sort is more efficient (and smaller) than qsort for small lists */
@@ -645,7 +645,6 @@ int main( int argc, char *argv[] ) {
 	if ( sw_uid ) swuid( sw_uid );
 
     /* Calculate GMT offset from local timezone */
-    time(&gmtoffset);
     gmtoffset -= mktime(gmtime(&gmtoffset));
 
 	/* In case we have more than one web server defined, we

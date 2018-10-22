@@ -1,5 +1,11 @@
-Changes in 1.1.2
+Changes in 1.1.3
 ----------------
+
+- Fixed a year 2038 issue on 32-bit systems (thanks to Ansel Consulting)
+
+
+1.1.2
+-----
 
 - Security fix: setegid wasn't always applied
 - Fixed compiler warning 'ignoring return value' for recent gcc versions
