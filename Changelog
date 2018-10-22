@@ -1,5 +1,12 @@
-Changes in 1.1.3
+Changes in 1.2.0
 ----------------
+
+- Fix for port numbers that were not used in daemon mode (thanks to Matthew Jones)
+- Discard the use of local time offset, because it causes incorrect synchronisation when TZDATA isn't correct, https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=876687 (thanks for Mert Dirik)
+
+
+1.1.3
+-----
 
 - Fixed a year 2038 issue on 32-bit systems (thanks to Ansel Consulting)
 

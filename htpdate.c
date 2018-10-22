@@ -1,5 +1,5 @@
 /*
-	htpdate v1.1.3
+	htpdate v1.2.0
 
 	Eddy Vervest <eddy@vervest.org>
 	http://www.vervest.org/htp
@@ -52,7 +52,7 @@
 #include <pwd.h>
 #include <grp.h>
 
-#define VERSION 				"1.1.3"
+#define VERSION 				"1.2.0"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -73,7 +73,36 @@
 /* By default we turn off "debug" and "log" mode  */
 static int		debug = 0;
 static int		logmode = 0;
-static time_t	gmtoffset = 0;
+
+
+/* Make mktime timezone agnostic, see manpage timegm */
+time_t gmtmktime (struct tm *tm)
+{
+    char *tz;
+    time_t result;
+
+    /* Temporarily set timezone to UTC for conversion */
+    tz = getenv("TZ");
+    if (tz) {
+		tz = strdup (tz);
+	}
+    setenv("TZ", "", 1);
+    tzset();
+
+    result = mktime (tm);
+
+    /* Restore timezone */
+    if (tz) {
+      setenv("TZ", tz, 1);
+      free (tz);
+    }
+    else {
+      unsetenv("TZ");
+    }
+    tzset();
+
+    return result;
+}
 
 
 /* Insertion sort is more efficient (and smaller) than qsort for small lists */
@@ -121,7 +150,6 @@ static void splithostport( char **host, char **port ) {
 		*port = rc + 1;
 		return;
 	}
-
 }
 
 
@@ -280,18 +308,15 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 			strncpy(remote_time, pdate + 11, 24);
 
 			if ( strptime( remote_time, "%d %b %Y %T", &tm) != NULL) {
-				/* Web server timestamps are without daylight saving */
-				tm.tm_isdst = 0;
-				timevalue.tv_sec = mktime(&tm);
+				timevalue.tv_sec = gmtmktime(&tm);
 			} else {
 				printlog( 1, "%s unknown time format", host );
 			}
 
 			/* Print host, raw timestamp, round trip time */
 			if ( debug )
-				printlog( 0, "%-25s %s (%.3f) => %li", host, remote_time, \
-				  rtt * 1e-6, timevalue.tv_sec - timeofday.tv_sec \
-				  + gmtoffset );
+				printlog( 0, "%-25s %s %s (%.3f) => %li", host, port, remote_time, \
+				  rtt * 1e-6, timevalue.tv_sec - timeofday.tv_sec );
 
 		} else {
 			printlog( 1, "%s no timestamp", host );
@@ -304,7 +329,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	/* Return the time delta between web server time (timevalue)
 	   and system time (timeofday)
 	*/
-	return( timevalue.tv_sec - timeofday.tv_sec + gmtoffset );
+	return( timevalue.tv_sec - timeofday.tv_sec );
 			
 }
 
@@ -485,7 +510,8 @@ static void runasdaemon( char *pidfile ) {
 
 int main( int argc, char *argv[] ) {
 	char				*host = NULL, *proxy = NULL, *proxyport = NULL;
-	char				*port;
+	char				*port = NULL;
+	char				*hostport = NULL;
 	char				*httpversion = DEFAULT_HTTP_VERSION;
 	char				*pidfile = DEFAULT_PID_FILE;
 	char				*user = NULL, *userstr = NULL, *group = NULL;
@@ -644,9 +670,6 @@ int main( int argc, char *argv[] ) {
 	if ( sw_gid ) swgid( sw_gid );
 	if ( sw_uid ) swuid( sw_uid );
 
-    /* Calculate GMT offset from local timezone */
-    gmtoffset -= mktime(gmtime(&gmtoffset));
-
 	/* In case we have more than one web server defined, we
 	   spread the polls equal within a second and take a "nap" in between
 	*/
@@ -676,7 +699,8 @@ int main( int argc, char *argv[] ) {
 	for ( i = optind; i < argc; i++ ) {
 
 		/* host:port is stored in argv[i] */
-		host = (char *)argv[i];
+		hostport = (char *)argv[i];
+		host = strdup(hostport);
 		port = DEFAULT_HTTP_PORT;
 		splithostport( &host, &port );
 
@@ -756,7 +780,6 @@ int main( int argc, char *argv[] ) {
 		if ( debug ) {
 			printlog( 0, "#: %d mean: %d average: %.3f", goodtimes, \
 					mean, timeavg );
-			printlog( 0, "Timezone: GMT%+li (%s,%s)", gmtoffset/3600, tzname[0], tzname[1] );
 		}
 
 		/* Do I really need to change the time?  */
@@ -806,6 +829,8 @@ int main( int argc, char *argv[] ) {
 			if ( sleeptime < maxsleep )
 				sleeptime <<= 1;
 		}
+		if ( debug )
+			printlog( 0, "poll %ld s", sleeptime ); 
 
 	} else {
 		printlog( 1, "No server suitable for synchronization found" );
