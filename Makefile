@@ -1,4 +1,4 @@
-prefix = /usr
+prefix = $(DESTDIR)/usr
 bindir = ${prefix}/bin
 mandir = ${prefix}/share/man
 
@@ -12,7 +12,7 @@ STRIP = /usr/bin/strip -s
 all: htpdate
 
 htpdate: htpdate.c
-	$(CC) $(CFLAGS) -o htpdate htpdate.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -o htpdate htpdate.c
 
 install: all
 	$(STRIP) htpdate

@@ -1,12 +1,12 @@
 Summary: HTTP based time synchronization tool
 Name: htpdate
-Version: 1.0.4
+Version: 1.0.5
 Release: 1
 License: GPL
 Group: System Environment/Daemons
-URL: http://www.clevervest.com/htp/
-Packager: Eddy Vervest <eddy@cleVervest.com>
-Source: http://www.clevervest.com/htp/archive/c/%{name}-%{version}.tar.bz2
+URL: http://www.vervest.org/htp
+Packager: Eddy Vervest <eddy@vervest.org>
+Source: http://www.vervest.org/htp/archive/c/%{name}-%{version}.tar.bz2
 BuildRoot: %{_tmppath}/%{name}-%{version}-root
 Prereq: /sbin/chkconfig
 

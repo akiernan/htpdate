@@ -1,6 +1,12 @@
-Changes in 1.0.4
+Changes in 1.0.5
 ----------------
 
+- Change of e-mail/website
+- Fix for debian build
+
+
+1.0.4
+-----
 - Fixed a memory leak (reported and fixed by Andreas Bohne-Lang) 
 
 
