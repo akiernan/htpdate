@@ -1,5 +1,5 @@
-htpdate (1.0.2) stable; urgency=low
+htpdate (1.0.3) stable; urgency=low
 
-  * Buffer overflow fix.
+  * Fixed logic error.... 1.0.2 is broken
 
- -- Eddy Vervest <eddy@cleVervest.com>  Mon, 01 Sep 2008 22:40:45 +0200 
+ -- Eddy Vervest <eddy@cleVervest.com>  Mon, 02 Sep 2008 22:20:45 +0200 

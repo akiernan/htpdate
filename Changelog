@@ -1,7 +1,13 @@
-Changes in 1.0.2
+Changes in 1.0.3
 ----------------
 
-- Fixed a buffer overflow when time offset get to large (reported by Kim Hansen)
+- Fixed logic error... 1.0.2 is broken :(
+
+
+1.0.2
+-----
+
+- Fixed a buffer overflow when time offset gets to large
   https://dev.openwrt.org/cgi-bin/trac.fcgi/ticket/3940
 
 

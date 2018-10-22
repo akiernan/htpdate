@@ -1,5 +1,5 @@
 /*
-	htpdate v1.0.2
+	htpdate v1.0.3
 
 	Eddy Vervest <eddy@cleVervest.com>
 	http://www.clevervest.com/htp
@@ -52,7 +52,7 @@
 #include <pwd.h>
 #include <grp.h>
 
-#define VERSION 				"1.0.2"
+#define VERSION 				"1.0.3"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -484,8 +484,8 @@ int main( int argc, char *argv[] ) {
 	char				*httpversion = DEFAULT_HTTP_VERSION;
 	char				*pidfile = DEFAULT_PID_FILE;
 	char				*user = NULL, *userstr = NULL, *group = NULL;
-	double				timeavg;
-	double				sumtimes, drift = 0;
+	long long			sumtimes;
+	double				timeavg, drift = 0;
 	int					timedelta[MAX_HTTP_HOSTS], timestamp;
 	int                 numservers, validtimes, goodtimes, mean;
 	int					nap = 0, when = 500000, precision = 0;
@@ -756,7 +756,7 @@ int main( int argc, char *argv[] ) {
 		}
 
 		/* Do I really need to change the time?  */
-		if ( (sumtimes > 0) || !daemonize ) {
+		if ( sumtimes || !daemonize ) {
 			/* If a precision was specified and the time offset is small
 			   (< +-1 second), adjust the time with the value of precision
 			*/
