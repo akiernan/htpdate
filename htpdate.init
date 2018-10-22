@@ -10,7 +10,7 @@ case "$1" in
   start)
 	echo -n "Starting htpdate: "
 	# Set the time first before daemonizing, because the time offset
-	# might take too long for smooth time adjustment
+	# might be too big for smooth time adjustment
 	/usr/bin/htpdate -s $SERVERS
 	/usr/bin/htpdate -D -i $PIDFILE $SERVERS
 	# or all in once

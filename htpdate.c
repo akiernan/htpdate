@@ -1,5 +1,5 @@
 /*
-	htpdate v0.8.4
+	htpdate v0.8.5
 
 	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
@@ -50,7 +50,7 @@
 #include <stdarg.h>
 #include <limits.h>
 
-#define VERSION 				"0.8.4"
+#define VERSION 				"0.8.5"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
@@ -71,9 +71,12 @@ static char		logmode = 0;
 static time_t	gmtoffset;
 
 
-static int longcomp(const void *a, const void *b) {
+static int compare( const void *a, const void *b ) {
 
-	return ( *(long*)a - *(long*)b );
+	if ( *(int *)(a) < *(int *)(b) )
+		return -1;
+	else
+		return 1;
 }
 
 /* Split argument in hostname/IP-address and TCP port
@@ -118,7 +121,7 @@ static void splithostport( char **host, char **port ) {
 
 
 /* Printlog is a slighty modified version used in rdate */
-static void printlog(char is_error, char *format, ...) {
+static void printlog( char is_error, char *format, ... ) {
 	va_list args;
 	int n;
 	char buf[128];
@@ -362,7 +365,8 @@ int main( int argc, char *argv[] ) {
 	char				maxsleep = DEFAULT_MAX_SLEEP;
 	char				sleeptime = minsleep;
 	int					timelimit = DEFAULT_TIME_LIMIT;
-	char				setmode = 0, try, param;
+	char				setmode = 0, try;
+	int					param;
 	char				httpversion = DEFAULT_HTTP_VERSION;
 	char				ipversion = DEFAULT_IP_VERSION;
 	char				*pidfile = DEFAULT_PID_FILE;
@@ -458,17 +462,17 @@ int main( int argc, char *argv[] ) {
 	if ( debug == 1 )
 		daemonize = 0;
 
-	/* Run as a daemonize when -D is set and -d isn't */
+	/* Run as a daemonize when -D is set */
 	if ( daemonize ) {
 
 		/* Check if htpdate is already running (pid exists)*/
 		pid_file=fopen(pidfile, "r");
-		if (pid_file) {
+		if ( pid_file ) {
 			printlog( 1, "htpdate already running" );
 			exit(1);
 		}
 
-		pid=fork();
+		pid = fork();
 		if ( pid < 0 ) {
 			printlog ( 1, "Forking error" );
 			exit(1);
@@ -494,7 +498,7 @@ int main( int argc, char *argv[] ) {
 		umask(0);
 
 		/* Change the current working directory */
-		if ((chdir("/")) < 0) {
+		if ( (chdir("/")) < 0 ) {
 			printlog( 1, "Error cd /" );
 			exit(1);
 		}
@@ -521,8 +525,7 @@ int main( int argc, char *argv[] ) {
 		}
 
 		/* Query only mode doesn't exist in daemon mode */
-		if ( setmode == 0 )
-			setmode = 1;
+		if ( ! setmode ) setmode = 1;
 
 	}
 
@@ -579,7 +582,7 @@ int main( int argc, char *argv[] ) {
 	}
 
 	/* Sort the timedelta results */
-	qsort( &timedelta, validtimes, sizeof(timedelta[0]), longcomp );
+	qsort( &timedelta, validtimes, sizeof(timedelta[0]), compare );
 
 	/* Mean time value */
 	mean = timedelta[validtimes/2];
@@ -603,7 +606,7 @@ int main( int argc, char *argv[] ) {
 		if ( debug ) {
 			printf("#: %d, mean: %d, average: %.3f\n", goodtimes, \
 					mean, timeavg );
-			printf("Timezone: %s %s\n", tzname[0], tzname[1] );
+			printf("Timezone: GMT%+li (%s,%s)\n", gmtoffset / 3600, tzname[0], tzname[1] );
 		}
 
 		/* Do I really need to change the time?  */
@@ -626,12 +629,12 @@ int main( int argc, char *argv[] ) {
 		if ( daemonize ) sleep( 1 << minsleep );
 	}
 
-	/* Do not step through time, only adjust in daemon mode */
+	/* After first poll cycle do not step through time, only adjust */
 	setmode = 1;
 
 	} while ( daemonize );		/* end of infinite while loop */
 
-	if ( !sumtimes ) {
+	if ( ! sumtimes ) {
 		setclock( 0, 0 );
 	}
 

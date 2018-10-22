@@ -1,5 +1,13 @@
-Changes in 0.8.4
+Changes in 0.8.5
 ----------------
+
+- Changed the variable type of "param" from char into int (thanks to
+  Arnaud Mazin). GCC 3.4.x is less forgiving than older versions.
+- Made compare function for qsort more robust (avoiding overflow).
+
+
+0.8.4
+-----
 
 - Finaly added IPv6 support!
 - If you would lose internet connectivity, htpdate would flood the system

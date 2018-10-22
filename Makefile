@@ -5,7 +5,7 @@ mandir = ${prefix}/man
 #CC = tcc
 #CC = icc
 CC = gcc
-CFLAGS = -Wall -ansi -Os
+CFLAGS += -Wall -ansi -Os
 
 INSTALL = /usr/bin/install -c
 
