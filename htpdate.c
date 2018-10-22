@@ -1,5 +1,5 @@
 /*
-	htpdate v0.6.2
+	htpdate v0.7.0
 
 	Eddy Vervest <eddy@clevervest.com>
 	http://www.clevervest.com/htp
@@ -48,7 +48,7 @@
 #include <math.h>
 #include <limits.h>
 
-#define version 		"0.6.2"
+#define version 		"0.7.0"
 #define	BUFFER			2048
 
 
@@ -86,7 +86,8 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsig
 	int					server_s;
 	struct sockaddr_in	server_addr;
 	struct tm			tm;
-	struct timeval		timevalue, timeofday;
+	struct timeval		timevalue = {.tv_sec = LONG_MAX};
+	struct timeval		timeofday = {.tv_sec = 0};
 	struct hostent		*hostinfo;
 	double				rtt;
 	char				out_buf[BUFFER];	// Output buffer for HEAD request
@@ -94,12 +95,6 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsig
 	char				remote_time[24];	// holds timestamp RFC1123 format
 	char				*pdate = NULL;
 
-
-	/* Initialize web server timevalue and current time */
-	timevalue.tv_sec = LONG_MAX;
-	timevalue.tv_usec = 0;
-	timeofday.tv_sec = 0;
-	timeofday.tv_usec = 0;
 
 	/* Connect to web server via proxy server or directly
 	   Pragma: no-cache "forces" an HTTP/1.0 or HTTP/1.1 compliant
@@ -178,8 +173,6 @@ static long getHTTPdate( char *host, int port, char *proxy, int proxyport, unsig
 				printlog( 1, "%-25s response without timestamp", host );
 			}
 
-			close(server_s);
-	
 		}						/* bytes received */
 
 	} else 						/* connect  */
@@ -254,6 +247,7 @@ int main( int argc, char *argv[] ) {
 	char				*host = NULL, *proxy = NULL, *portstr = NULL;
 	long				timedelta[16], timestamp;
 	double				timeavg, threshold = 5;
+	int 				numservers;
 	int 				i, validtime, goodtime;
 	int					port, proxyport = 8080;
 	unsigned long		nap = 0, when = 500000;
@@ -378,7 +372,8 @@ int main( int argc, char *argv[] ) {
 	/* In case we have more than one web server defined, we
 	   spread the polls equal in time and take a "nap" in between polls.
 	*/
-	if ( (argc - optind) > 1 )
+	numservers = argc - optind;
+	if ( numservers > 1 )
 		when = nap = (unsigned long)(1000000 / (argc - optind + 1));
 
 
@@ -419,14 +414,19 @@ int main( int argc, char *argv[] ) {
 			validtime++;
 		}
 
-		/* Sleep between polls, to spread polls equally within a second.
-		   Example, polls are at usec:
+		/* Sleep for a while, unless we detect a time offset */
+		if ( daemonize && (timestamp == 0) )
+			sleep( (1 << sleeptime) / numservers );
+
+		/* Take a nap, to spread polls equally within a second.
+		   Example:
 		   2 servers => 0.333, 0.666
 		   3 servers => 0.250, 0.500, 0.750
 		   4 servers => 0.200, 0.400, 0.600, 0.800
 		   ...
 		   nap = 1000000 / (#servers + 1)
 		*/
+
 		when += nap;
 	}
 
@@ -488,10 +488,6 @@ int main( int argc, char *argv[] ) {
 		sleeptime++;
 		if ( sleeptime > maxsleep ) sleeptime = maxsleep;
 	}	
-
-	/* Sleep time until next poll */
-	printlog( 0, "Sleep for %li seconds", (long)(1 << sleeptime) );
-	sleep( 1 << sleeptime );
 
 	} /* end of infinite while loop */
 

@@ -1,5 +1,18 @@
-Changes in 0.6.2
+Changes in 0.7.0
 ----------------
+
+- The polling mechanisme has been improved once more :)
+  As of this version polls are also spread within the polling cycle.
+  This way a time offset will be detected earlier, without increasing the
+  polling frequency.
+- Sleeptime isn't writen to syslog anymore, only time adjustments
+- Previous versions of htpdate tried to close a already closed HTTP/1.0
+  session.
+- The rpm version doesn't override the init-script anymore
+
+
+0.6.2
+-----
 
 - Bug fix, time wasn't correct if 'timeavg' was negative...
 

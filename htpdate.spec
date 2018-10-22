@@ -1,8 +1,8 @@
 Summary: HTTP based time synchronization tool
 Name: htpdate
-Version: 0.6.2
+Version: 0.7.0
 Release: 1
-License: GNU General Public License version 2
+License: GPL
 Group: System Environment/Daemons
 URL: http://www.clevervest.com/htp/
 Packager: Eddy Vervest <eddy@clevervest.com>
@@ -44,7 +44,7 @@ install -m 755 htpdate.init %{buildroot}/etc/rc.d/init.d/htpdate
 
 %files
 %defattr(-,root,root)
-%doc README
+%doc README CHANGES
+%config(noreplace) /etc/rc.d/init.d/htpdate
 /usr/bin/htpdate
 /usr/man/man8/htpdate.8.gz
-/etc/rc.d/init.d/htpdate

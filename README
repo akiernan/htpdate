@@ -19,10 +19,10 @@ Installation
 
 Tested on Linux and FreeBSD only, but should work for most Unix flavors.
 
-# tar zxvf htpdate-0.x.tar.gz
+# tar zxvf htpdate-0.x.x.tar.gz
 or
-# tar jxvf htpdate-0.x.tar.bz2
-# cd htpdate-0.x
+# tar jxvf htpdate-0.x.x.tar.bz2
+# cd htpdate-0.x.x
 # make
 # make install
 
@@ -42,8 +42,10 @@ See manpage for more detail.
 To do
 -----
 
+- IPv6 support (?)
+- adjtimex support (?)
 - I'm open for suggestions :)
 
 
 Eddy Vervest <eddy@clevervest.com>
-31 March 2005
+April 2005
