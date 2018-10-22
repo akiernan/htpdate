@@ -1,6 +1,13 @@
-Changes in 1.0.5
+Changes in 1.0.6
 ----------------
 
+- Bug fix for https://bugs.gentoo.org/show_bug.cgi?id=350685
+(Thanks Diego Augusto Molina for the bug report and Pavel Kazakov for
+debugging)
+
+
+1.0.5
+-----
 - Change of e-mail/website
 - Fix for debian build
 
@@ -19,7 +26,7 @@ Changes in 1.0.5
 1.0.2
 -----
 
-- Fixed a buffer overflow when time offset gets to large
+- Fixed a buffer overflow when time offset gets too large
   https://dev.openwrt.org/cgi-bin/trac.fcgi/ticket/3940
 
 
