@@ -1,5 +1,13 @@
-Changes in 0.9.2
+Changes in 0.9.3
 ----------------
+
+- Bug fixes: poll loop could be become close to zero in case of a "connection
+failed". Sleeptime wasn't correct in case all hosts fail.
+- Use more "sane" minsleep and maxsleep values.
+
+
+0.9.2
+-----
 
 - The use of the ntp_adjtime system call is now optional. The clock
   frequency will be adjusted when using the "-x" switch and the systematic

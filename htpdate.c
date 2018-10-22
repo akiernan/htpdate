@@ -1,5 +1,5 @@
 /*
-	htpdate v0.9.2
+	htpdate v0.9.3
 
 	Eddy Vervest <eddy@cleVervest.com>
 	http://www.clevervest.com/htp
@@ -53,15 +53,15 @@
 #include <pwd.h>
 #include <grp.h>
 
-#define VERSION 				"0.9.2"
+#define VERSION 				"0.9.3"
 #define	MAX_HTTP_HOSTS			15				/* 16 web servers */
 #define	DEFAULT_HTTP_PORT		"80"
 #define	DEFAULT_PROXY_PORT		"8080"
 #define	DEFAULT_IP_VERSION		PF_UNSPEC		/* IPv6 and IPv4 */
 #define	DEFAULT_HTTP_VERSION	"1"				/* HTTP/1.1 */
 #define	DEFAULT_TIME_LIMIT		31536000		/* 1 year */
-#define	DEFAULT_MIN_SLEEP		1024			/* about 17 minutes */
-#define	DEFAULT_MAX_SLEEP		131072			/* about 36 hours */
+#define	DEFAULT_MIN_SLEEP		1800			/* 30 minutes */
+#define	DEFAULT_MAX_SLEEP		115200			/* 32 hours */
 #define	MAX_DRIFT				32768000		/* 500 PPM */
 #define	MAX_ATTEMPT				2				/* Poll attempts */
 #define	DEFAULT_PID_FILE		"/var/run/htpdate.pid"
@@ -181,7 +181,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 	/* Was the hostname and service resolvable? */
 	if ( rc ) {
 		printlog( 1, "%s host or service unavailable", host );
-		return( LONG_MAX );
+		return(0);
 	}
 
 	/* Build a combined HTTP/1.0 and 1.1 HEAD request
@@ -212,7 +212,7 @@ static long getHTTPdate( char *host, char *port, char *proxy, char *proxyport, c
 
 	if ( rc ) {
 		printlog( 1, "%s connection failed", host );
-		return( LONG_MAX );
+		return(0);
 	}
 
 	/* Wait till we reach the desired time, "when" */
@@ -779,7 +779,7 @@ int main( int argc, char *argv[] ) {
 		printlog( 1, "No server suitable for synchronization found" );
 		/* Sleep for minsleep to avoid flooding */
 		if ( daemonize )
-			sleep( 1 << minsleep );
+			sleep( minsleep );
 		else
 			exit(1);
 	}
